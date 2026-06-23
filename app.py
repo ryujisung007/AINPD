@@ -1,14 +1,14 @@
-# app.py (v6.0) - AI 제품개발 실습교안 웹앱
+# app.py (v6.1) - AI 제품개발 실습교안 단일 앱
 """
-DEFAULT CODING RULES
-- Role: 20년 경력 시니어 풀스택 개발자
-- Constraints: 외부 라이브러리 최소, 오류 처리 포함, 가독성 최우선
-- Purpose: AI 제품개발 실습교안 기반 Streamlit 교육용 웹페이지
+AI 제품개발 실습교안 기반 Streamlit 교육용 웹페이지
+
+- 외부 앱 라우터 제거
+- intro / main 구조 제거
+- app.py 하나로 실행
+- 왼쪽 섹션별 실습 스크립트 생성
 """
 
 import streamlit as st
-import importlib
-from typing import Dict
 
 
 # =========================================================
@@ -24,79 +24,50 @@ st.set_page_config(
 
 
 # =========================================================
-# 2. 스타일 설정
+# 2. 스타일
 # =========================================================
 
-def apply_custom_style():
-    st.markdown(
-        """
-        <style>
-        .main-title {
-            font-size: 34px;
-            font-weight: 800;
-            color: #1f2937;
-            margin-bottom: 8px;
-        }
-        .sub-title {
-            font-size: 18px;
-            color: #4b5563;
-            margin-bottom: 24px;
-        }
-        .section-card {
-            padding: 18px;
-            border-radius: 14px;
-            background-color: #f9fafb;
-            border: 1px solid #e5e7eb;
-            margin-bottom: 16px;
-        }
-        .script-box {
-            padding: 16px;
-            border-radius: 12px;
-            background-color: #f3f4f6;
-            border-left: 5px solid #6366f1;
-            white-space: pre-wrap;
-            font-family: "Noto Sans KR", sans-serif;
-            font-size: 15px;
-            line-height: 1.7;
-        }
-        .small-caption {
-            color: #6b7280;
-            font-size: 13px;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
-
-
-apply_custom_style()
+st.markdown(
+    """
+    <style>
+    .main-title {
+        font-size: 34px;
+        font-weight: 800;
+        color: #1f2937;
+        margin-bottom: 8px;
+    }
+    .sub-title {
+        font-size: 18px;
+        color: #4b5563;
+        margin-bottom: 24px;
+    }
+    .section-card {
+        padding: 18px;
+        border-radius: 14px;
+        background-color: #f9fafb;
+        border: 1px solid #e5e7eb;
+        margin-bottom: 16px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
 
 # =========================================================
-# 3. 기존 외부 앱 설정
+# 3. 공통 함수
 # =========================================================
 
-EXTERNAL_APPS: Dict[str, str] = {
-    "🔁 가상 페르소나 개발모드": "abc_persona_main",
-    "🥣 FoodTech 대시보드": "pages.foodtech.01_dashboard",
-    "🔍 FoodTech 기술/제품 추천": "pages.foodtech.02_recommendation",
-    "📊 FoodTech 요약 리포트": "pages.foodtech.03_summary",
-}
-
-
-# =========================================================
-# 4. 공통 유틸 함수
-# =========================================================
-
-def safe_text(value: str, default: str = "") -> str:
+def safe_text(value, default=""):
     """입력값 공백 방지"""
     if value is None:
         return default
+
     value = str(value).strip()
     return value if value else default
 
 
-def render_prompt_result(prompt: str):
+def render_prompt_result(prompt):
     """생성된 프롬프트 출력"""
     st.markdown("### 생성된 AI 스크립트")
     st.text_area(
@@ -106,41 +77,40 @@ def render_prompt_result(prompt: str):
     )
 
 
-def run_selected_external_app(module_path: str):
-    """기존 외부 앱 실행"""
-    try:
-        module = importlib.import_module(module_path)
+# =========================================================
+# 4. 사이드바 목차
+# =========================================================
 
-        if hasattr(module, "main"):
-            module.main()
-        else:
-            st.error(f"❌ '{module_path}' 모듈에는 main() 함수가 없습니다.")
+st.sidebar.title("🧪 AI 제품개발 실습교안")
 
-    except ModuleNotFoundError:
-        st.error(
-            f"""
-            ❌ 모듈을 찾을 수 없습니다.
+section = st.sidebar.radio(
+    "실습 목차",
+    [
+        "0. 교육 개요",
+        "1. 신제품 개발 프로세스",
+        "2. 제품개발 페르소나",
+        "3. 제품 아이디어 도출",
+        "4. 제품개발용 데이터",
+        "5. 배합비 개발",
+        "6. 가상 소비자 조사",
+        "7. 프로젝트 정리",
+    ]
+)
 
-            실행하려는 모듈:
-            `{module_path}`
-
-            확인할 사항:
-            1. 파일 경로가 실제로 존재하는지 확인
-            2. 폴더에 `__init__.py`가 필요한 구조인지 확인
-            3. 파일명이 숫자로 시작하거나 특수문자가 포함되어 있지 않은지 확인
-            """
-        )
-
-    except Exception as e:
-        st.error(f"❌ 앱 실행 중 오류가 발생했습니다: {e}")
+st.sidebar.markdown("---")
+st.sidebar.caption("AI 제품개발 교육용 Streamlit 앱")
 
 
 # =========================================================
-# 5. 메인 교육 앱
+# 5. 화면 구성
 # =========================================================
 
-def render_home():
-    st.markdown('<div class="main-title">🧪 AI 제품개발 실습교안 작성 도우미</div>', unsafe_allow_html=True)
+if section == "0. 교육 개요":
+    st.markdown(
+        '<div class="main-title">🧪 AI 제품개발 실습교안 작성 도우미</div>',
+        unsafe_allow_html=True
+    )
+
     st.markdown(
         '<div class="sub-title">식품 신제품 개발 교육에서 사용할 AI 스크립트, 페르소나, 데이터, 배합비, 소비자 조사 프롬프트를 단계별로 작성합니다.</div>',
         unsafe_allow_html=True
@@ -174,7 +144,7 @@ def render_home():
     )
 
 
-def render_process_page():
+elif section == "1. 신제품 개발 프로세스":
     st.header("1. 신제품 개발 프로세스")
 
     st.markdown(
@@ -225,7 +195,7 @@ def render_process_page():
         render_prompt_result(prompt)
 
 
-def render_persona_page():
+elif section == "2. 제품개발 페르소나":
     st.header("2. 제품개발 페르소나 만들기")
 
     st.markdown(
@@ -243,7 +213,10 @@ def render_persona_page():
     with col1:
         product_name = st.text_input("제품명", "오렌지 비트 에너지 샷")
         product_type = st.text_input("제품유형", "저당 기능성 음료")
-        main_ingredients = st.text_area("주요 원료", "오렌지농축액, 비트농축액, 비타민B군, 타우린")
+        main_ingredients = st.text_area(
+            "주요 원료",
+            "오렌지농축액, 비트농축액, 비타민B군, 타우린"
+        )
 
     with col2:
         target = st.text_input("타깃", "2030 직장인")
@@ -288,7 +261,7 @@ def render_persona_page():
         render_prompt_result(prompt)
 
 
-def render_idea_page():
+elif section == "3. 제품 아이디어 도출":
     st.header("3. 제품 아이디어 도출")
 
     st.markdown(
@@ -303,9 +276,15 @@ def render_idea_page():
     col1, col2 = st.columns(2)
 
     with col1:
-        tech_keywords = st.text_area("푸드테크 기술 키워드", "저당화 기술, 천연 감미료, 기능성 원료, 발효 기술")
+        tech_keywords = st.text_area(
+            "푸드테크 기술 키워드",
+            "저당화 기술, 천연 감미료, 기능성 원료, 발효 기술"
+        )
         product_group = st.text_input("제품군", "RTD 음료")
-        consumer_trend = st.text_area("소비자 트렌드", "헬시플레저, 제로슈거, 피로회복, 간편 섭취")
+        consumer_trend = st.text_area(
+            "소비자 트렌드",
+            "헬시플레저, 제로슈거, 피로회복, 간편 섭취"
+        )
 
     with col2:
         channel = st.text_input("출시 채널", "편의점")
@@ -343,7 +322,7 @@ def render_idea_page():
         render_prompt_result(prompt)
 
 
-def render_data_page():
+elif section == "4. 제품개발용 데이터":
     st.header("4. 제품개발용 데이터 만들기")
 
     st.markdown(
@@ -408,7 +387,7 @@ def render_data_page():
         render_prompt_result(prompt)
 
 
-def render_formula_page():
+elif section == "5. 배합비 개발":
     st.header("5. 배합비 개발")
 
     st.markdown(
@@ -430,7 +409,10 @@ def render_formula_page():
 
     with col2:
         target_ph = st.number_input("목표 pH", min_value=0.0, value=3.5)
-        main_ingredients = st.text_area("주요 원료", "오렌지농축액, 비트농축액, 비타민B군, 타우린")
+        main_ingredients = st.text_area(
+            "주요 원료",
+            "오렌지농축액, 비트농축액, 비타민B군, 타우린"
+        )
         sweetener = st.text_input("감미료", "설탕, 알룰로스")
         acidulant = st.text_input("산미료", "구연산")
 
@@ -467,7 +449,7 @@ def render_formula_page():
         render_prompt_result(prompt)
 
 
-def render_consumer_page():
+elif section == "6. 가상 소비자 조사":
     st.header("6. 가상 소비자 조사")
 
     st.markdown(
@@ -517,7 +499,7 @@ def render_consumer_page():
         render_prompt_result(prompt)
 
 
-def render_project_page():
+elif section == "7. 프로젝트 정리":
     st.header("7. 프로젝트 정리")
 
     st.markdown(
@@ -538,7 +520,10 @@ def render_project_page():
 
     with col2:
         core_concept = st.text_area("핵심 콘셉트", "저당, 피로회복, 여름 한정, 간편 섭취")
-        key_result = st.text_area("주요 실습 결과", "페르소나 개발, 제품 아이디어 도출, 배합비 초안, 가상 소비자 조사")
+        key_result = st.text_area(
+            "주요 실습 결과",
+            "페르소나 개발, 제품 아이디어 도출, 배합비 초안, 가상 소비자 조사"
+        )
 
     if st.button("최종 발표 스크립트 생성", use_container_width=True):
         prompt = f"""
@@ -566,70 +551,3 @@ def render_project_page():
 12. 질의응답 예상 질문 5개와 답변
 """
         render_prompt_result(prompt)
-
-
-def render_training_app():
-    section = st.sidebar.radio(
-        "📘 실습교안 목차",
-        [
-            "0. 교육 개요",
-            "1. 신제품 개발 프로세스",
-            "2. 제품개발 페르소나",
-            "3. 제품 아이디어 도출",
-            "4. 제품개발용 데이터",
-            "5. 배합비 개발",
-            "6. 가상 소비자 조사",
-            "7. 프로젝트 정리",
-        ],
-        key="training_section"
-    )
-
-    if section == "0. 교육 개요":
-        render_home()
-    elif section == "1. 신제품 개발 프로세스":
-        render_process_page()
-    elif section == "2. 제품개발 페르소나":
-        render_persona_page()
-    elif section == "3. 제품 아이디어 도출":
-        render_idea_page()
-    elif section == "4. 제품개발용 데이터":
-        render_data_page()
-    elif section == "5. 배합비 개발":
-        render_formula_page()
-    elif section == "6. 가상 소비자 조사":
-        render_consumer_page()
-    elif section == "7. 프로젝트 정리":
-        render_project_page()
-
-
-# =========================================================
-# 6. 최상위 앱 라우터
-# =========================================================
-
-def main():
-    st.sidebar.title("🧪 식품개발 멀티앱 플랫폼")
-
-    app_options = {
-        "📘 AI 제품개발 실습교안": "internal_training_app",
-        **EXTERNAL_APPS
-    }
-
-    selected_app = st.sidebar.selectbox(
-        "📂 실행할 앱 선택",
-        list(app_options.keys()),
-        key="app_selector"
-    )
-
-    st.sidebar.markdown("---")
-    st.sidebar.caption("v6.0 | AI 제품개발 교육용 Streamlit 앱")
-
-    selected_value = app_options[selected_app]
-
-    if selected_value == "internal_training_app":
-        render_training_app()
-    else:
-        run_selected_external_app(selected_value)
-
-
-if __name__ == "__main__":
-    main()
