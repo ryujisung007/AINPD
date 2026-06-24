@@ -545,6 +545,32 @@ def _build_twin_html(rows: list, product_name: str) -> str:
     )
 
 
+_TWIN_EXAMPLE_DRIVE_ID = "1yFdiScZ0yV-e0_-cIWw6EPKYGSJsAKdb"
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _fetch_twin_example_html() -> str | None:
+    import urllib.request
+    url = f"https://drive.google.com/uc?export=download&id={_TWIN_EXAMPLE_DRIVE_ID}"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return r.read().decode("utf-8")
+    except Exception:
+        return None
+
+@st.dialog("🔬 가상 시뮬레이터 예시", width="large")
+def _show_twin_example_dialog():
+    import streamlit.components.v1 as components
+    with st.spinner("예시 파일 불러오는 중..."):
+        html = _fetch_twin_example_html()
+    if html:
+        components.html(html, height=620, scrolling=True)
+    else:
+        st.error("예시 파일을 불러올 수 없습니다. Google Drive 공유 설정을 확인해주세요.")
+        st.link_button("📂 Google Drive에서 직접 열기",
+                       f"https://drive.google.com/file/d/{_TWIN_EXAMPLE_DRIVE_ID}/view")
+
+
 # =========================================================
 # 5. 공통 UI 컴포넌트
 # =========================================================
@@ -3953,11 +3979,8 @@ elif section == "6️⃣ 가상모델 개발":
                          disabled=not bool(twin_html_input)):
                 st.session_state["twin_render_show"] = True
         with _tc2:
-            st.link_button(
-                "🔍 가상 시뮬레이터 예시보기",
-                "https://drive.google.com/file/d/1yFdiScZ0yV-e0_-cIWw6EPKYGSJsAKdb/view?usp=drive_link",
-                use_container_width=True,
-            )
+            if st.button("🔍 가상 시뮬레이터 예시보기", key="twin_example_btn", use_container_width=True):
+                _show_twin_example_dialog()
         with _tc3:
             if twin_html_input:
                 _bev_nm_dl = st.session_state.get("bev_prodname", "신제품")
