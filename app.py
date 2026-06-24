@@ -3946,13 +3946,19 @@ elif section == "6️⃣ 가상모델 개발":
             label_visibility="collapsed",
         )
 
-        _tc1, _tc2 = st.columns(2)
+        _tc1, _tc2, _tc3 = st.columns(3)
         with _tc1:
             if st.button("▶️ 시뮬레이터 실행", key="twin_render_btn",
                          use_container_width=True, type="primary",
                          disabled=not bool(twin_html_input)):
                 st.session_state["twin_render_show"] = True
         with _tc2:
+            st.link_button(
+                "🔍 가상 시뮬레이터 예시보기",
+                "https://drive.google.com/file/d/1yFdiScZ0yV-e0_-cIWw6EPKYGSJsAKdb/view?usp=drive_link",
+                use_container_width=True,
+            )
+        with _tc3:
             if twin_html_input:
                 _bev_nm_dl = st.session_state.get("bev_prodname", "신제품")
                 st.download_button(
