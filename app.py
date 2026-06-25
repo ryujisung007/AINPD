@@ -1147,7 +1147,7 @@ with st.sidebar:
                         _summary_rows.append([_sec, _tab_name, f"=COUNTA(D{_rn}:AZ{_rn})"])
                     _summary_rows.append(["", "", ""])
                     _summary_rows.append(["전체 합계", "", f"=SUM(C2:C{1+len(_ALL_HW_TABS)})"])
-                    _sw.update("A2", _summary_rows)
+                    _sw.update("A2", _summary_rows, value_input_option="USER_ENTERED")
                     _sh.reorder_worksheets([_sw] + [w for w in _sh.worksheets() if w.title != _SUMMARY])
                     if _created:
                         st.success(f"✅ 생성됨: {', '.join(_created)}")
