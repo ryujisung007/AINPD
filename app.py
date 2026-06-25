@@ -882,12 +882,12 @@ if not st.session_state.get("authenticated"):
     _lc, _cc, _rc = st.columns([1, 1.4, 1])
     with _cc:
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-        _code_in = st.text_input("접속 코드", type="password",
-                                  placeholder="강사에게 받은 접속 코드",
-                                  key="_login_code")
-        _name_in = st.text_input("이름", placeholder="본인 이름 입력 (예: 홍길동)",
-                                  key="_login_name")
-        if st.button("입장하기 →", use_container_width=True, type="primary", key="_login_btn"):
+        with st.form("_login_form"):
+            _code_in = st.text_input("접속 코드", type="password",
+                                      placeholder="강사에게 받은 접속 코드")
+            _name_in = st.text_input("이름", placeholder="본인 이름 입력 (예: 홍길동)")
+            _submitted = st.form_submit_button("입장하기 →", use_container_width=True, type="primary")
+        if _submitted:
             if _code_in != _ACCESS_CODE:
                 st.error("접속 코드가 올바르지 않습니다.")
             elif not _name_in.strip():
