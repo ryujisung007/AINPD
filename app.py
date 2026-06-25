@@ -382,13 +382,11 @@ def _submit_hw(sheet_tab: str, student: str, content: str,
         # ② 데이터 행 전체를 한 줄 높이(21px)로 고정 + C~E 열 텍스트 잘림(CLIP)
         #    → 14명 수강생 입력을 한 화면에서 스크롤 없이 조망 가능
         _batch_reqs += [
-            # 데이터 행 높이 21px 고정
+            # 데이터 행 높이 내용에 맞게 자동 조절 (CLIP+80자라 자연히 한 줄 ~21px)
             {
-                "updateDimensionProperties": {
-                    "range": {"sheetId": ws.id, "dimension": "ROWS",
-                              "startIndex": 1, "endIndex": 200},
-                    "properties": {"pixelSize": 21},
-                    "fields": "pixelSize",
+                "autoResizeDimensions": {
+                    "dimensions": {"sheetId": ws.id, "dimension": "ROWS",
+                                   "startIndex": 1, "endIndex": 200}
                 }
             },
             # A 제출시간 130px
@@ -478,7 +476,7 @@ def _hw_ui(sheet_tab: str, content: str, btn_key: str,
         ai_result = st.text_area(
             "AI 생성결과", key=f"{btn_key}_ai",
             placeholder="AI 대화창의 결과를 여기에 붙여넣으세요 (선택)",
-            height=120, label_visibility="collapsed",
+            height=360, label_visibility="collapsed",
         )
 
     file_link = ""
