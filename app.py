@@ -1065,9 +1065,63 @@ if section == "🏠 교육 개요":
                     unsafe_allow_html=True)
 
     st.markdown("---")
-    st.markdown("### 📤 구글 시트 공유 링크 만들기")
-    st.caption("제미나이에서 생성한 배합비·결과표를 구글 시트로 내보낸 뒤, 과제 제출용 공유 링크를 만드는 방법입니다.")
+    st.markdown("### 📤 공유 링크 만들기 가이드")
+    st.caption("과제 제출 시 파일 링크가 필요한 경우 아래 가이드를 참고하세요.")
+
+    st.markdown("**구글 시트 공유 링크** (배합비 등 표 형식 결과물)")
     _show_share_guide()
+
+    st.markdown("")
+    with st.expander("📁 구글 드라이브 파일 공유 링크 만드는 법 (HTML·PDF 등)"):
+        st.markdown("""
+<div style="background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:10px;
+padding:16px 20px;margin:4px 0;">
+<div style="font-size:14px;font-weight:700;color:#0f172a;margin-bottom:12px;">
+📁 구글 드라이브 파일 업로드 &amp; 공유 링크 만들기</div>
+<div style="font-size:13px;color:#334155;line-height:1.9;">
+
+<b style="color:#0f172a;">① 구글 드라이브에 파일 업로드</b><br>
+&nbsp;&nbsp;• <b>drive.google.com</b> 접속 (Gmail 계정 로그인 필요)<br>
+&nbsp;&nbsp;• 좌측 상단 <span style="background:#e2e8f0;border-radius:4px;padding:1px 6px;font-size:12px;font-weight:600;">+ 새로 만들기</span> 클릭 → <b>"파일 업로드"</b> 선택<br>
+&nbsp;&nbsp;• 내 컴퓨터에서 저장한 파일(HTML·PDF 등) 선택 후 업로드<br><br>
+
+<b style="color:#0f172a;">② 파일 공유 설정 (누구나 볼 수 있게)</b><br>
+&nbsp;&nbsp;• 업로드된 파일에서 <b>마우스 우클릭</b> → <b>"공유"</b> 클릭<br>
+&nbsp;&nbsp;• 공유 팝업에서 <b>"일반 액세스"</b> 항목의 <b>"변경"</b> 클릭<br>
+&nbsp;&nbsp;• <b>"링크가 있는 모든 사용자"</b> 선택 → 역할: <b>뷰어</b><br>
+&nbsp;&nbsp;• <span style="background:#e2e8f0;border-radius:4px;padding:1px 6px;font-size:12px;font-weight:600;">완료</span> 클릭<br><br>
+
+<b style="color:#0f172a;">③ 링크 복사 후 과제 제출란에 붙여넣기</b><br>
+&nbsp;&nbsp;• 공유 팝업 하단 <b>"링크 복사"</b> 클릭<br>
+&nbsp;&nbsp;• 복사된 링크를 과제 제출의 <b>파일 링크</b> 입력칸에 붙여넣기
+
+</div></div>""", unsafe_allow_html=True)
+
+    with st.expander("🎞️ NotebookLM 슬라이드 전체공유 링크 만드는 법"):
+        st.markdown("""
+<div style="background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:10px;
+padding:16px 20px;margin:4px 0;">
+<div style="font-size:14px;font-weight:700;color:#0f172a;margin-bottom:12px;">
+🎞️ NotebookLM 슬라이드 생성 &amp; 전체공유 링크 만들기</div>
+<div style="font-size:13px;color:#334155;line-height:1.9;">
+
+<b style="color:#0f172a;">① NotebookLM에서 슬라이드 만들기</b><br>
+&nbsp;&nbsp;• <b>notebooklm.google.com</b> 접속 → 해당 노트북 열기<br>
+&nbsp;&nbsp;• 우측 패널 <b>"노트북 가이드"</b> 클릭<br>
+&nbsp;&nbsp;• 하단 <b>"슬라이드 만들기"</b> 또는 <b>"프레젠테이션"</b> 선택<br>
+&nbsp;&nbsp;• AI가 자동으로 슬라이드를 생성합니다<br><br>
+
+<b style="color:#0f172a;">② 슬라이드 전체공유 링크 만들기</b><br>
+&nbsp;&nbsp;• 슬라이드가 열리면 우측 상단 <b>공유 아이콘(↗)</b> 또는 <b>"공유"</b> 버튼 클릭<br>
+&nbsp;&nbsp;• <b>"프레젠테이션 공유"</b> 팝업에서 <b>"링크가 있는 모든 사용자"</b> 선택<br>
+&nbsp;&nbsp;• <b>"링크 복사"</b> 클릭<br><br>
+
+<b style="color:#0f172a;">③ 링크 붙여넣기</b><br>
+&nbsp;&nbsp;• 복사된 링크를 과제 제출의 <b>파일 링크</b> 입력칸에 붙여넣기<br>
+&nbsp;&nbsp;• <span style="background:#fef9c3;border-radius:4px;padding:1px 6px;font-size:12px;">
+⚠️ Google 계정으로 로그인 상태에서만 생성 가능합니다</span>
+
+</div></div>""", unsafe_allow_html=True)
 
 
 # ----------------------------------------------------------
