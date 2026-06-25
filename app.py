@@ -281,6 +281,19 @@ def _get_gs_client():
 _HW_HEADERS = ["제출시간", "학생이름", "제출내용", "AI 적용결과 붙여넣기", "파일링크"]
 
 
+@st.cache_data(ttl=60, show_spinner=False)
+def _get_hw_count(sheet_tab: str) -> int:
+    """해당 탭의 제출 인원 수 반환 (1분 캐시)"""
+    try:
+        gc = _get_gs_client()
+        sh = gc.open_by_key(_GS_SHEET_ID)
+        ws = sh.worksheet(sheet_tab)
+        names = ws.col_values(2)  # B열: 학생이름
+        return max(0, len(names) - 1)  # 헤더 제외
+    except Exception:
+        return -1
+
+
 def _submit_hw(sheet_tab: str, student: str, content: str,
                ai_result: str = "", file_link: str = ""):
     from datetime import datetime
@@ -363,11 +376,17 @@ def _hw_ui(sheet_tab: str, content: str, btn_key: str,
         ok, err = _submit_hw(sheet_tab, student, content, ai_result, file_link)
         st.session_state[f"{btn_key}_done"] = ok
         st.session_state[f"{btn_key}_err"] = err if not ok else ""
+        if ok:
+            _get_hw_count.clear()
     with col_status:
         if st.session_state.get(f"{btn_key}_done"):
             st.success(f"✅ **{student}** 님 제출 완료! (재제출 시 최종본으로 갱신)")
         elif st.session_state.get(f"{btn_key}_err"):
             st.error(f"제출 실패: {st.session_state[f'{btn_key}_err']}")
+
+    count = _get_hw_count(sheet_tab)
+    if count >= 0:
+        st.caption(f"👥 현재 제출 인원: **{count}명**")
 
 
 def _show_share_guide():
@@ -3257,15 +3276,24 @@ padding:14px 18px;margin:8px 0;">
 <b>목표:</b> 맛·품질규격·기능성 원재료 함량 변화 없이 원가 20% 절감<br>
 <b>조건:</b> Brix·pH·산도·고형분 규격 불변 / 기능성 성분 함량 불변
 </div></div>""", unsafe_allow_html=True)
-            if st.button("💡 힌트 보기", key="ms2_hint_toggle_a", use_container_width=True):
-                st.session_state["ms2_show_hints"] = not st.session_state.get("ms2_show_hints", False)
-            if st.session_state.get("ms2_show_hints", False):
+            _show_a = st.session_state.get("ms2_show_hints_a", False)
+            if st.button("💡 힌트 닫기" if _show_a else "💡 힌트 보기", key="ms2_hint_toggle_a", use_container_width=True):
+                st.session_state["ms2_show_hints_a"] = not _show_a
+                st.rerun()
+            if st.session_state.get("ms2_show_hints_a", False):
+                st.markdown(
+                    '<div style="background:#fef9c3;border:1.5px solid #facc15;'
+                    'border-radius:8px;padding:12px 16px;margin:6px 0;">'
+                    '<b style="color:#713f12;font-size:13px;">💡 힌트 — 선택 후 스크립트에 반영됩니다</b>',
+                    unsafe_allow_html=True,
+                )
                 st.pills("절감 방향",
                     ["원료 대체", "배합비율 조정", "정제수 비율 상향", "농축액 농도 조정"],
                     selection_mode="multi", key="ms2_ha1", label_visibility="collapsed")
                 st.pills("출력 형식",
                     ["원재료별 절감액 표", "변경 전/후 비교표", "절감률 합계 포함"],
                     selection_mode="multi", key="ms2_ha2", label_visibility="collapsed")
+                st.markdown('</div>', unsafe_allow_html=True)
             _a1 = st.session_state.get("ms2_ha1") or []
             _a2 = st.session_state.get("ms2_ha2") or []
             _ms2_default = f"""현재 배합비 기준 제품 원가를 20% 낮추는 방법을 제안해줘.
@@ -3292,15 +3320,24 @@ padding:14px 18px;margin:8px 0;">
 <b>목표:</b> 과즙감 향상 + 단맛 저감<br>
 <b>조건:</b> 기능성 성분 함량·Brix·pH 규격 불변 / 원가 변동 최소화
 </div></div>""", unsafe_allow_html=True)
-            if st.button("💡 힌트 보기", key="ms2_hint_toggle_b", use_container_width=True):
-                st.session_state["ms2_show_hints"] = not st.session_state.get("ms2_show_hints", False)
-            if st.session_state.get("ms2_show_hints", False):
+            _show_b = st.session_state.get("ms2_show_hints_b", False)
+            if st.button("💡 힌트 닫기" if _show_b else "💡 힌트 보기", key="ms2_hint_toggle_b", use_container_width=True):
+                st.session_state["ms2_show_hints_b"] = not _show_b
+                st.rerun()
+            if st.session_state.get("ms2_show_hints_b", False):
+                st.markdown(
+                    '<div style="background:#fef9c3;border:1.5px solid #facc15;'
+                    'border-radius:8px;padding:12px 16px;margin:6px 0;">'
+                    '<b style="color:#713f12;font-size:13px;">💡 힌트 — 선택 후 스크립트에 반영됩니다</b>',
+                    unsafe_allow_html=True,
+                )
                 st.pills("개선 방향",
                     ["과즙감 향상 (농축액 증량)", "단맛 저감 (감미료 배합 조정)", "산미 강화 (산도 조절)", "향료 재배합"],
                     selection_mode="multi", key="ms2_hb1", label_visibility="collapsed")
                 st.pills("검증 방법",
                     ["관능 검사 항목 포함", "변경 전/후 배합비 비교", "Brix·pH 수치 재확인"],
                     selection_mode="multi", key="ms2_hb2", label_visibility="collapsed")
+                st.markdown('</div>', unsafe_allow_html=True)
             _b1 = st.session_state.get("ms2_hb1") or []
             _b2 = st.session_state.get("ms2_hb2") or []
             _ms2_default = f"""현재 배합비를 아래 소비자 피드백에 따라 수정해줘.
