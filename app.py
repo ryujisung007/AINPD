@@ -1203,6 +1203,16 @@ with st.sidebar:
                         _summary_rows.append(["", "", ""])
                         _summary_rows.append(["전체 합계", "", f"=SUM(C2:C{1+len(_ALL_HW_TABS)})"])
                         _sw.update("A2", _summary_rows, value_input_option="USER_ENTERED")
+                        # 기존 과제 탭에서 제출자 이름 읽어 제출현황 D열 이후 복원
+                        for _si, (_sec, _tab_name) in enumerate(_tab_sections):
+                            try:
+                                _hw_ws = _sh.worksheet(_tab_name)
+                                _names = [r for r in _hw_ws.col_values(2)[1:] if r.strip()]
+                                if _names:
+                                    _row_idx = _si + 2
+                                    _sw.update(f"D{_row_idx}", [_names])
+                            except Exception:
+                                pass
                         # 탭 순서: 제출현황 맨 앞 → _ALL_HW_TABS 순 → 그 외 탭
                         _all_ws = {w.title: w for w in _sh.worksheets()}
                         _ordered = [_sw]
