@@ -977,6 +977,18 @@ try:
 except Exception:
     _ACCESS_CODE = "kfi2026"  # 로컬 실행 기본값
 
+# 새로고침·탭 재오픈 후 URL 쿼리 파라미터로 로그인 상태 자동 복원 (8시간 유효)
+import time as _time
+if not st.session_state.get("authenticated"):
+    _qp = st.query_params
+    try:
+        if "u" in _qp and "t" in _qp:
+            if _time.time() - float(_qp["t"]) < 8 * 3600:
+                st.session_state["authenticated"] = True
+                st.session_state["student_name"] = _qp["u"]
+    except Exception:
+        pass
+
 if not st.session_state.get("authenticated"):
     st.markdown("""
     <div style="max-width:420px;margin:80px auto 0 auto;background:#ffffff;
@@ -1005,6 +1017,9 @@ if not st.session_state.get("authenticated"):
             else:
                 st.session_state["authenticated"] = True
                 st.session_state["student_name"] = _name_in.strip()
+                # URL에 저장 → 새로고침·탭 재오픈 후에도 8시간 자동 복원
+                st.query_params["u"] = _name_in.strip()
+                st.query_params["t"] = str(_time.time())
                 st.rerun()
     st.stop()
 
@@ -1041,6 +1056,7 @@ with st.sidebar:
     if st.button("로그아웃", key="_logout_btn", use_container_width=True):
         st.session_state["authenticated"] = False
         st.session_state["student_name"] = ""
+        st.query_params.clear()
         st.rerun()
 
 
