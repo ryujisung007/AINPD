@@ -1176,8 +1176,8 @@ if section == "🏠 교육 개요":
     st.markdown("### 📤 공유 링크 만들기 가이드")
     st.caption("과제 제출 시 파일 링크가 필요한 경우 아래 가이드를 참고하세요.")
 
-    st.markdown("**구글 시트 공유 링크** (배합비 등 표 형식 결과물)")
-    _show_share_guide()
+    with st.expander("📊 구글 시트 공유 링크 만드는 법 (배합비 등 표 형식 결과물)"):
+        _show_share_guide()
 
     st.markdown("")
     with st.expander("📁 구글 드라이브 파일 공유 링크 만드는 법 (HTML·PDF 등)"):
