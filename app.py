@@ -1198,8 +1198,8 @@ with st.sidebar:
                         ]
                         _summary_rows = []
                         for _si, (_sec, _tab_name) in enumerate(_tab_sections):
-                            _rn = _si + 2  # row 1=헤더, data는 2행부터
-                            _summary_rows.append([_sec, _tab_name, f"=COUNTA(D{_rn}:AZ{_rn})"])
+                            # 각 과제 탭의 B열(학생이름)을 직접 참조 → 일괄생성 재실행해도 수 유지
+                            _summary_rows.append([_sec, _tab_name, f"=IFERROR(COUNTA(INDIRECT(\"'\"&B{_si+2}&\"'!B2:B1000\")),0)"])
                         _summary_rows.append(["", "", ""])
                         _summary_rows.append(["전체 합계", "", f"=SUM(C2:C{1+len(_ALL_HW_TABS)})"])
                         _sw.update("A2", _summary_rows, value_input_option="USER_ENTERED")
