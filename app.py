@@ -280,6 +280,14 @@ def _get_gs_client():
 
 _HW_HEADERS = ["제출시간", "학생이름", "작성 스크립트", "AI 생성결과", "파일링크"]
 
+# 프롬프트 복사 영역에 자동으로 붙는 제출요약 조건
+# AI가 답변 마지막에 [제출답안]: ... 을 추가 → 시트 셀에는 이 부분만 저장
+_SUBMIT_INSTRUCTION = (
+    "\n\n---\n"
+    "[제출요약 조건] 위 답변이 완료된 후, 마지막 줄에 아래 형식으로 핵심 내용을 반드시 추가하세요:\n"
+    "[제출답안]: 여기에 100자 이내로 핵심 결과 요약"
+)
+
 
 @st.cache_data(ttl=60, show_spinner=False)
 def _get_hw_count(sheet_tab: str) -> int:
@@ -307,7 +315,27 @@ def _submit_hw(sheet_tab: str, student: str, content: str,
             ws.append_row(_HW_HEADERS)
 
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-        new_row = [timestamp, student, content, ai_result, file_link]
+
+        # 셀에는 단축 텍스트, 전체 내용은 셀 메모(마우스 오버 팝업)에 저장
+        def _cell_short(text: str, n: int = 80) -> str:
+            t = text.strip()
+            return (t[:n] + "…") if len(t) > n else t
+
+        content_cell = _cell_short(content)
+
+        # AI 생성결과: [제출답안] 태그가 있으면 그 부분만, 없으면 단축
+        ai_cell = ""
+        if ai_result:
+            _marker = "[제출답안]"
+            _idx = ai_result.find(_marker)
+            if _idx != -1:
+                ai_cell = ai_result[_idx:].strip()
+                if len(ai_cell) > 150:
+                    ai_cell = ai_cell[:150] + "…"
+            else:
+                ai_cell = _cell_short(ai_result)
+
+        new_row = [timestamp, student, content_cell, ai_cell, file_link]
 
         # 동일 학생이 이미 제출한 행이 있으면 덮어쓰기 (최종 제출만 유지)
         all_rows = ws.get_all_values()
@@ -321,8 +349,35 @@ def _submit_hw(sheet_tab: str, student: str, content: str,
 
         if existing_idx:
             ws.update(f"A{existing_idx}:E{existing_idx}", [new_row])
+            target_row = existing_idx
         else:
             ws.append_row(new_row)
+            target_row = len(all_rows) + 1  # 새 행 위치
+
+        # 셀 메모에 전체 원문 저장 → 구글 시트에서 마우스 오버 시 전체 내용 팝업
+        _note_reqs = []
+        if content.strip():
+            _note_reqs.append({
+                "updateCells": {
+                    "range": {"sheetId": ws.id,
+                              "startRowIndex": target_row - 1, "endRowIndex": target_row,
+                              "startColumnIndex": 2, "endColumnIndex": 3},
+                    "rows": [{"values": [{"note": content.strip()}]}],
+                    "fields": "note",
+                }
+            })
+        if ai_result.strip():
+            _note_reqs.append({
+                "updateCells": {
+                    "range": {"sheetId": ws.id,
+                              "startRowIndex": target_row - 1, "endRowIndex": target_row,
+                              "startColumnIndex": 3, "endColumnIndex": 4},
+                    "rows": [{"values": [{"note": ai_result.strip()}]}],
+                    "fields": "note",
+                }
+            })
+        if _note_reqs:
+            sh.batch_update({"requests": _note_reqs})
 
         return True, ""
     except Exception as e:
@@ -627,10 +682,12 @@ def render_ai_result(prompt: str, key: str):
     st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
     st.markdown("### 🤖 AI 실행")
 
+    _prompt_with_inst = prompt.strip() + _SUBMIT_INSTRUCTION
+
     col1, col2 = st.columns([3, 1])
     with col1:
         if st.button("▶ Claude에게 분석 요청하기", key=f"run_{key}"):
-            result = run_claude(prompt)
+            result = run_claude(_prompt_with_inst)
             st.session_state[f"result_{key}"] = result
 
     with col2:
@@ -638,7 +695,7 @@ def render_ai_result(prompt: str, key: str):
             st.session_state[f"show_prompt_{key}"] = not st.session_state.get(f"show_prompt_{key}", False)
 
     if st.session_state.get(f"show_prompt_{key}"):
-        st.text_area("복사해서 ChatGPT, Gemini 등에 붙여넣기", value=prompt.strip(), height=300, key=f"ta_{key}")
+        st.text_area("복사해서 ChatGPT, Gemini 등에 붙여넣기", value=_prompt_with_inst, height=300, key=f"ta_{key}")
 
     if result := st.session_state.get(f"result_{key}"):
         st.markdown("#### 📊 분석 결과")
@@ -755,7 +812,7 @@ def render_persona_coach(prompt: str, fields: dict, defaults: dict, key: str):
     # 프롬프트 복사용 출력
     if st.session_state.get(f"show_prompt_{key}"):
         st.markdown("**아래 전체를 복사 → ChatGPT / Gemini 등 AI 대화창에 붙여넣기**")
-        st.code(prompt.strip(), language=None)
+        st.code(prompt.strip() + _SUBMIT_INSTRUCTION, language=None)
 
 
 def score_data_script(fields: dict, defaults: dict) -> tuple:
@@ -855,7 +912,7 @@ def render_data_coach(prompt: str, fields: dict, defaults: dict, key: str):
 
     if st.session_state.get(f"show_prompt_{key}"):
         st.markdown("**아래 전체를 복사 → ChatGPT 대화창에 붙여넣기**")
-        st.code(prompt.strip(), language=None)
+        st.code(prompt.strip() + _SUBMIT_INSTRUCTION, language=None)
 
 
 # =========================================================
@@ -3329,6 +3386,12 @@ padding:14px 20px;margin-bottom:8px;">
         ms2_scenario = st.pills("시나리오 선택", _SCN_OPTS, key="ms2_scenario",
                                 label_visibility="collapsed")
 
+        # 시나리오가 바뀌면 이전에 작성한 스크립트 초기화
+        _cur_scn = ms2_scenario or ""
+        if st.session_state.get("ms2_prev_scenario") != _cur_scn:
+            st.session_state["ms2_prev_scenario"] = _cur_scn
+            st.session_state.pop("ms2_script", None)
+
         # 시나리오 설명 카드
         if ms2_scenario and "A" in ms2_scenario:
             st.markdown("""
@@ -3351,9 +3414,11 @@ padding:14px 18px;margin:8px 0;">
                     '<b style="color:#713f12;font-size:13px;">💡 힌트 — 선택 후 스크립트에 반영됩니다</b>',
                     unsafe_allow_html=True,
                 )
+                st.markdown('<span style="font-size:12px;font-weight:700;color:#92400e;">① 어떤 방법으로 원가를 절감할까요? (복수 선택 가능)</span>', unsafe_allow_html=True)
                 st.pills("절감 방향",
                     ["원료 대체", "배합비율 조정", "정제수 비율 상향", "농축액 농도 조정"],
                     selection_mode="multi", key="ms2_ha1", label_visibility="collapsed")
+                st.markdown('<span style="font-size:12px;font-weight:700;color:#92400e;">② AI에게 어떤 형식으로 결과를 보여달라고 할까요?</span>', unsafe_allow_html=True)
                 st.pills("출력 형식",
                     ["원재료별 절감액 표", "변경 전/후 비교표", "절감률 합계 포함"],
                     selection_mode="multi", key="ms2_ha2", label_visibility="collapsed")
@@ -3395,9 +3460,11 @@ padding:14px 18px;margin:8px 0;">
                     '<b style="color:#713f12;font-size:13px;">💡 힌트 — 선택 후 스크립트에 반영됩니다</b>',
                     unsafe_allow_html=True,
                 )
+                st.markdown('<span style="font-size:12px;font-weight:700;color:#075985;">① 어떤 방법으로 맛을 개선할까요? (복수 선택 가능)</span>', unsafe_allow_html=True)
                 st.pills("개선 방향",
                     ["과즙감 향상 (농축액 증량)", "단맛 저감 (감미료 배합 조정)", "산미 강화 (산도 조절)", "향료 재배합"],
                     selection_mode="multi", key="ms2_hb1", label_visibility="collapsed")
+                st.markdown('<span style="font-size:12px;font-weight:700;color:#075985;">② 수정 결과를 어떻게 검증하고 볼까요?</span>', unsafe_allow_html=True)
                 st.pills("검증 방법",
                     ["관능 검사 항목 포함", "변경 전/후 배합비 비교", "Brix·pH 수치 재확인"],
                     selection_mode="multi", key="ms2_hb2", label_visibility="collapsed")
@@ -3428,9 +3495,18 @@ padding:14px 18px;margin:8px 0;">
         if ms2_scenario:
             st.markdown("---")
             st.markdown("**스크립트 작성 → 수정 후 복사하세요**")
+            st.caption("힌트에서 선택한 항목이 반영된 기본 스크립트입니다. 직접 수정하거나, 힌트 선택 후 아래 버튼으로 다시 반영하세요.")
 
             if "ms2_script" not in st.session_state:
                 st.session_state["ms2_script"] = _ms2_default
+
+            # 힌트 선택이 열려 있을 때만 반영 버튼 표시
+            _hints_open = st.session_state.get("ms2_show_hints_a") or st.session_state.get("ms2_show_hints_b")
+            if _hints_open:
+                if st.button("✅ 선택한 힌트를 스크립트에 반영하기", key="ms2_apply_hints",
+                             use_container_width=True, type="primary"):
+                    st.session_state["ms2_script"] = _ms2_default
+                    st.rerun()
 
             st.text_area("미션2 스크립트", key="ms2_script",
                          height=260, label_visibility="collapsed")
