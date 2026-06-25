@@ -286,8 +286,8 @@ _SUBMIT_INSTRUCTION = (
     "\n\n---\n"
     "[제출요약 조건] 위 답변이 완료된 후, 반드시 마지막에 아래 형식으로 작성하세요.\n"
     "- 에세이 문체(서술형)로 작성할 것\n"
-    "- 글자 수: 정확히 100자 이상 110자 이하 (공백 포함, 반드시 충족)\n"
-    "[제출답안]: 여기에 에세이 문체로 100~110자 핵심 요약 작성"
+    "- 글자 수: 정확히 200자 이상 230자 이하 (공백 포함, 반드시 충족)\n"
+    "[제출답안]: 여기에 에세이 문체로 200~230자 핵심 요약 작성"
 )
 
 
@@ -332,8 +332,8 @@ def _submit_hw(sheet_tab: str, student: str, content: str,
             _idx = ai_result.find(_marker)
             if _idx != -1:
                 ai_cell = ai_result[_idx:].strip()
-                if len(ai_cell) > 130:
-                    ai_cell = ai_cell[:130] + "…"
+                if len(ai_cell) > 250:
+                    ai_cell = ai_cell[:250] + "…"
             else:
                 ai_cell = _cell_short(ai_result)
 
