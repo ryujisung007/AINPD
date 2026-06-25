@@ -3511,11 +3511,8 @@ padding:14px 18px;margin:8px 0;">
             st.text_area("미션2 스크립트", key="ms2_script",
                          height=260, label_visibility="collapsed")
 
-            if st.button("📋 스크립트 복사하기", key="ms2_copy_btn", use_container_width=True):
-                st.session_state["ms2_copy_snap"] = st.session_state.get("ms2_script", _ms2_default)
-                st.session_state["ms2_show_copy"] = not st.session_state.get("ms2_show_copy", False)
-            if st.session_state.get("ms2_show_copy"):
-                st.code(st.session_state.get("ms2_copy_snap", _ms2_default), language=None)
+            st.caption("📋 아래 코드 블록 우측 상단 복사 아이콘을 클릭 → AI 대화창에 붙여넣기")
+            st.code(st.session_state.get("ms2_script", _ms2_default), language=None)
 
             with st.expander("▶ 정답 스크립트 보기"):
                 if "A" in (ms2_scenario or ""):
