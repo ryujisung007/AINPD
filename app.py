@@ -479,6 +479,9 @@ def _submit_hw(sheet_tab: str, student: str, content: str,
         # 제출현황 탭에 학생 이름 추가 (D열부터 우측으로 확장)
         try:
             _sw = sh.worksheet("📊 제출현황")
+            # 시트 열이 부족하면 50열로 자동 확장 (기존 cols=3 탭 호환)
+            if _sw.col_count < 20:
+                _sw.resize(cols=50)
             _sw_data = _sw.get_all_values()
             for _sri, _sr in enumerate(_sw_data):
                 if _sri == 0:
