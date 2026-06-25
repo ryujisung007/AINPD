@@ -476,6 +476,24 @@ def _submit_hw(sheet_tab: str, student: str, content: str,
 
         sh.batch_update({"requests": _batch_reqs})
 
+        # 제출현황 탭에 학생 이름 추가 (D열부터 우측으로 확장)
+        try:
+            _sw = sh.worksheet("📊 제출현황")
+            _sw_data = _sw.get_all_values()
+            for _sri, _sr in enumerate(_sw_data):
+                if _sri == 0:
+                    continue
+                if len(_sr) >= 2 and _sr[1] == sheet_tab:
+                    # D열(index 3)부터 이름 목록
+                    _existing_names = [n for n in _sr[3:] if n.strip()]
+                    if student not in _existing_names:
+                        # 다음 빈 열: D=4번째열(1-based), 이미 n명이면 4+n
+                        _next_col = len(_existing_names) + 4
+                        _sw.update_cell(_sri + 1, _next_col, student)
+                    break
+        except Exception:
+            pass  # 제출현황 탭 없거나 실패해도 메인 제출은 성공
+
         return True, ""
     except Exception as e:
         return False, str(e)
@@ -1100,27 +1118,32 @@ with st.sidebar:
                     _SUMMARY = "📊 제출현황"
                     if _SUMMARY in _existing:
                         _sh.del_worksheet(_sh.worksheet(_SUMMARY))
-                    _sw = _sh.add_worksheet(title=_SUMMARY, rows=30, cols=3)
-                    _sw.update("A1:C1", [["섹션·탭", "시트명", "제출인원"]])
-                    _summary_rows = [
-                        ["연구원 페르소나", "연구원_페르소나", f"=COUNTA(연구원_페르소나!B2:B1000)"],
-                        ["마케터 페르소나", "마케터_페르소나", f"=COUNTA(마케터_페르소나!B2:B1000)"],
-                        ["온라인 시장분석", "온라인시장분석", f"=COUNTA(온라인시장분석!B2:B1000)"],
-                        ["식품전문정보분석", "식품전문정보분석", f"=COUNTA(식품전문정보분석!B2:B1000)"],
-                        ["시장조사 학습", "시장조사학습", f"=COUNTA(시장조사학습!B2:B1000)"],
-                        ["보고서 작성", "보고서작성", f"=COUNTA(보고서작성!B2:B1000)"],
-                        ["데이터 수집 스크립트", "데이터수집스크립트", f"=COUNTA(데이터수집스크립트!B2:B1000)"],
-                        ["데이터 학습지시", "데이터학습지시", f"=COUNTA(데이터학습지시!B2:B1000)"],
-                        ["배합비 작성", "배합비", f"=COUNTA(배합비!B2:B1000)"],
-                        ["배합비 미션", "배합비_미션", f"=COUNTA(배합비_미션!B2:B1000)"],
-                        ["배합비 프로세스", "배합비_프로세스", f"=COUNTA(배합비_프로세스!B2:B1000)"],
-                        ["디지털트윈랩", "디지털트윈랩", f"=COUNTA(디지털트윈랩!B2:B1000)"],
-                        ["가상소비자모델", "가상소비자모델", f"=COUNTA(가상소비자모델!B2:B1000)"],
-                        ["관능검사", "관능검사", f"=COUNTA(관능검사!B2:B1000)"],
-                        ["프로젝트 정리", "프로젝트정리", f"=COUNTA(프로젝트정리!B2:B1000)"],
-                        ["", "", ""],
-                        ["전체 합계", "", f"=SUM(C2:C{1+len(_ALL_HW_TABS)})"],
+                    # cols=50: D열부터 학생 이름이 우측으로 최대 46명까지 기록 가능
+                    _sw = _sh.add_worksheet(title=_SUMMARY, rows=30, cols=50)
+                    _sw.update("A1:D1", [["섹션·탭", "시트명", "제출수", "제출자 →"]])
+                    _tab_sections = [
+                        ("연구원 페르소나",     "연구원_페르소나"),
+                        ("마케터 페르소나",     "마케터_페르소나"),
+                        ("온라인 시장분석",     "온라인시장분석"),
+                        ("식품전문정보분석",    "식품전문정보분석"),
+                        ("시장조사 학습",       "시장조사학습"),
+                        ("보고서 작성",         "보고서작성"),
+                        ("데이터 수집 스크립트","데이터수집스크립트"),
+                        ("데이터 학습지시",     "데이터학습지시"),
+                        ("배합비 작성",         "배합비"),
+                        ("배합비 미션",         "배합비_미션"),
+                        ("배합비 프로세스",     "배합비_프로세스"),
+                        ("디지털트윈랩",        "디지털트윈랩"),
+                        ("가상소비자모델",      "가상소비자모델"),
+                        ("관능검사",            "관능검사"),
+                        ("프로젝트 정리",       "프로젝트정리"),
                     ]
+                    _summary_rows = []
+                    for _si, (_sec, _tab_name) in enumerate(_tab_sections):
+                        _rn = _si + 2  # row 1=헤더, data는 2행부터
+                        _summary_rows.append([_sec, _tab_name, f"=COUNTA(D{_rn}:AZ{_rn})"])
+                    _summary_rows.append(["", "", ""])
+                    _summary_rows.append(["전체 합계", "", f"=SUM(C2:C{1+len(_ALL_HW_TABS)})"])
                     _sw.update("A2", _summary_rows)
                     _sh.reorder_worksheets([_sw] + [w for w in _sh.worksheets() if w.title != _SUMMARY])
                     if _created:
