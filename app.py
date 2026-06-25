@@ -354,10 +354,12 @@ def _submit_hw(sheet_tab: str, student: str, content: str,
             ws.append_row(new_row)
             target_row = len(all_rows) + 1  # 새 행 위치
 
-        # 셀 메모에 전체 원문 저장 → 구글 시트에서 마우스 오버 시 전체 내용 팝업
-        _note_reqs = []
+        # 셀 메모(마우스 오버 팝업) + 시트 레이아웃 포맷 한 번에 처리
+        _batch_reqs = []
+
+        # ① 셀 메모에 전체 원문 저장
         if content.strip():
-            _note_reqs.append({
+            _batch_reqs.append({
                 "updateCells": {
                     "range": {"sheetId": ws.id,
                               "startRowIndex": target_row - 1, "endRowIndex": target_row,
@@ -367,7 +369,7 @@ def _submit_hw(sheet_tab: str, student: str, content: str,
                 }
             })
         if ai_result.strip():
-            _note_reqs.append({
+            _batch_reqs.append({
                 "updateCells": {
                     "range": {"sheetId": ws.id,
                               "startRowIndex": target_row - 1, "endRowIndex": target_row,
@@ -376,8 +378,77 @@ def _submit_hw(sheet_tab: str, student: str, content: str,
                     "fields": "note",
                 }
             })
-        if _note_reqs:
-            sh.batch_update({"requests": _note_reqs})
+
+        # ② 데이터 행 전체를 한 줄 높이(21px)로 고정 + C~E 열 텍스트 잘림(CLIP)
+        #    → 14명 수강생 입력을 한 화면에서 스크롤 없이 조망 가능
+        _batch_reqs += [
+            # 데이터 행 높이 21px 고정
+            {
+                "updateDimensionProperties": {
+                    "range": {"sheetId": ws.id, "dimension": "ROWS",
+                              "startIndex": 1, "endIndex": 200},
+                    "properties": {"pixelSize": 21},
+                    "fields": "pixelSize",
+                }
+            },
+            # A 제출시간 130px
+            {
+                "updateDimensionProperties": {
+                    "range": {"sheetId": ws.id, "dimension": "COLUMNS",
+                              "startIndex": 0, "endIndex": 1},
+                    "properties": {"pixelSize": 130},
+                    "fields": "pixelSize",
+                }
+            },
+            # B 학생이름 80px
+            {
+                "updateDimensionProperties": {
+                    "range": {"sheetId": ws.id, "dimension": "COLUMNS",
+                              "startIndex": 1, "endIndex": 2},
+                    "properties": {"pixelSize": 80},
+                    "fields": "pixelSize",
+                }
+            },
+            # C 작성스크립트 230px
+            {
+                "updateDimensionProperties": {
+                    "range": {"sheetId": ws.id, "dimension": "COLUMNS",
+                              "startIndex": 2, "endIndex": 3},
+                    "properties": {"pixelSize": 230},
+                    "fields": "pixelSize",
+                }
+            },
+            # D AI생성결과 230px
+            {
+                "updateDimensionProperties": {
+                    "range": {"sheetId": ws.id, "dimension": "COLUMNS",
+                              "startIndex": 3, "endIndex": 4},
+                    "properties": {"pixelSize": 230},
+                    "fields": "pixelSize",
+                }
+            },
+            # E 파일링크 160px
+            {
+                "updateDimensionProperties": {
+                    "range": {"sheetId": ws.id, "dimension": "COLUMNS",
+                              "startIndex": 4, "endIndex": 5},
+                    "properties": {"pixelSize": 160},
+                    "fields": "pixelSize",
+                }
+            },
+            # C~E 텍스트 넘침 CLIP (줄바꿈 없이 잘라냄)
+            {
+                "repeatCell": {
+                    "range": {"sheetId": ws.id,
+                              "startRowIndex": 1, "endRowIndex": 200,
+                              "startColumnIndex": 2, "endColumnIndex": 5},
+                    "cell": {"userEnteredFormat": {"wrapStrategy": "CLIP"}},
+                    "fields": "userEnteredFormat.wrapStrategy",
+                }
+            },
+        ]
+
+        sh.batch_update({"requests": _batch_reqs})
 
         return True, ""
     except Exception as e:
