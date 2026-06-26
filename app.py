@@ -1254,12 +1254,16 @@ with st.sidebar:
                         ]
                         _summary_rows = []
                         for _si, (_sec, _tab_name) in enumerate(_tab_sections):
-                            # 탭 이름을 공식에 직접 삽입 → 시트 데이터 변경 즉시 반영
                             _formula = "=IFERROR(COUNTA('" + _tab_name + "'!B2:B1000),0)"
                             _summary_rows.append([_sec, _tab_name, _formula])
                         _summary_rows.append(["", "", ""])
                         _summary_rows.append(["전체 합계", "", "=SUM(C2:C" + str(1 + len(_ALL_HW_TABS)) + ")"])
-                        _sw.update("A2", _summary_rows, value_input_option="USER_ENTERED")
+                        # values_update 사용: USER_ENTERED 옵션이 확실히 전달되어 수식으로 입력됨
+                        _sh.values_update(
+                            "'📊 제출현황'!A2",
+                            params={"valueInputOption": "USER_ENTERED"},
+                            body={"values": _summary_rows},
+                        )
                         # 기존 과제 탭 제출자 복원 — 읽기(batch) 1회 + 쓰기(batch) 1회
                         try:
                             _restore_ranges = ["'" + t + "'!B2:B1000" for _, t in _tab_sections]
