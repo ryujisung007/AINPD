@@ -4085,95 +4085,63 @@ padding:14px 20px;margin-bottom:16px;">
 </div></div>""", unsafe_allow_html=True)
 
         # ── 전략 지표 차트 + 회의실 비주얼 ──────────────
-        st.markdown("""
-<div style="display:flex;gap:14px;margin:4px 0 20px;flex-wrap:wrap;">
+        st.markdown(
+            "<div style='display:flex;gap:14px;margin:4px 0 20px;flex-wrap:wrap;'>"
 
-  <!-- 전략 평가 차트 -->
-  <div style="flex:1;min-width:200px;background:#fff;border:1.5px solid #e2e8f0;
-  border-radius:12px;padding:18px;">
-    <div style="font-size:12px;font-weight:700;color:#0f172a;margin-bottom:2px;">
-    📊 제품 전략 평가 지표</div>
-    <div style="font-size:10px;color:#64748b;margin-bottom:14px;">연구원 × 마케터 협업 분석 (예시)</div>
+            "<div style='flex:1;min-width:200px;background:#fff;border:1.5px solid #e2e8f0;"
+            "border-radius:12px;padding:18px;'>"
+            "<div style='font-size:12px;font-weight:700;color:#0f172a;margin-bottom:2px;'>📊 제품 전략 평가 지표</div>"
+            "<div style='font-size:10px;color:#64748b;margin-bottom:14px;'>연구원 × 마케터 협업 분석 (예시)</div>"
+            "<div style='margin-bottom:9px;'><div style='display:flex;justify-content:space-between;margin-bottom:3px;'>"
+            "<span style='font-size:11px;color:#334155;'>시장성</span>"
+            "<span style='font-size:11px;font-weight:700;color:#3b82f6;'>85%</span></div>"
+            "<div style='background:#e2e8f0;border-radius:4px;height:8px;'>"
+            "<div style='background:#3b82f6;width:85%;height:8px;border-radius:4px;'></div></div></div>"
+            "<div style='margin-bottom:9px;'><div style='display:flex;justify-content:space-between;margin-bottom:3px;'>"
+            "<span style='font-size:11px;color:#334155;'>관능 경쟁력</span>"
+            "<span style='font-size:11px;font-weight:700;color:#10b981;'>72%</span></div>"
+            "<div style='background:#e2e8f0;border-radius:4px;height:8px;'>"
+            "<div style='background:#10b981;width:72%;height:8px;border-radius:4px;'></div></div></div>"
+            "<div style='margin-bottom:9px;'><div style='display:flex;justify-content:space-between;margin-bottom:3px;'>"
+            "<span style='font-size:11px;color:#334155;'>원가 경쟁력</span>"
+            "<span style='font-size:11px;font-weight:700;color:#f59e0b;'>68%</span></div>"
+            "<div style='background:#e2e8f0;border-radius:4px;height:8px;'>"
+            "<div style='background:#f59e0b;width:68%;height:8px;border-radius:4px;'></div></div></div>"
+            "<div style='margin-bottom:9px;'><div style='display:flex;justify-content:space-between;margin-bottom:3px;'>"
+            "<span style='font-size:11px;color:#334155;'>차별화 포인트</span>"
+            "<span style='font-size:11px;font-weight:700;color:#8b5cf6;'>90%</span></div>"
+            "<div style='background:#e2e8f0;border-radius:4px;height:8px;'>"
+            "<div style='background:#8b5cf6;width:90%;height:8px;border-radius:4px;'></div></div></div>"
+            "<div><div style='display:flex;justify-content:space-between;margin-bottom:3px;'>"
+            "<span style='font-size:11px;color:#334155;'>시장 진입 가능성</span>"
+            "<span style='font-size:11px;font-weight:700;color:#ef4444;'>78%</span></div>"
+            "<div style='background:#e2e8f0;border-radius:4px;height:8px;'>"
+            "<div style='background:#ef4444;width:78%;height:8px;border-radius:4px;'></div></div></div>"
+            "</div>"
 
-    <div style="margin-bottom:9px;">
-      <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
-        <span style="font-size:11px;color:#334155;">시장성</span>
-        <span style="font-size:11px;font-weight:700;color:#3b82f6;">85%</span>
-      </div>
-      <div style="background:#e2e8f0;border-radius:4px;height:8px;">
-        <div style="background:#3b82f6;width:85%;height:8px;border-radius:4px;"></div></div>
-    </div>
-    <div style="margin-bottom:9px;">
-      <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
-        <span style="font-size:11px;color:#334155;">관능 경쟁력</span>
-        <span style="font-size:11px;font-weight:700;color:#10b981;">72%</span>
-      </div>
-      <div style="background:#e2e8f0;border-radius:4px;height:8px;">
-        <div style="background:#10b981;width:72%;height:8px;border-radius:4px;"></div></div>
-    </div>
-    <div style="margin-bottom:9px;">
-      <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
-        <span style="font-size:11px;color:#334155;">원가 경쟁력</span>
-        <span style="font-size:11px;font-weight:700;color:#f59e0b;">68%</span>
-      </div>
-      <div style="background:#e2e8f0;border-radius:4px;height:8px;">
-        <div style="background:#f59e0b;width:68%;height:8px;border-radius:4px;"></div></div>
-    </div>
-    <div style="margin-bottom:9px;">
-      <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
-        <span style="font-size:11px;color:#334155;">차별화 포인트</span>
-        <span style="font-size:11px;font-weight:700;color:#8b5cf6;">90%</span>
-      </div>
-      <div style="background:#e2e8f0;border-radius:4px;height:8px;">
-        <div style="background:#8b5cf6;width:90%;height:8px;border-radius:4px;"></div></div>
-    </div>
-    <div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
-        <span style="font-size:11px;color:#334155;">시장 진입 가능성</span>
-        <span style="font-size:11px;font-weight:700;color:#ef4444;">78%</span>
-      </div>
-      <div style="background:#e2e8f0;border-radius:4px;height:8px;">
-        <div style="background:#ef4444;width:78%;height:8px;border-radius:4px;"></div></div>
-    </div>
-  </div>
+            "<div style='flex:1;min-width:200px;background:linear-gradient(160deg,#1e293b 0%,#0f172a 100%);"
+            "border-radius:12px;padding:18px;'>"
+            "<div style='font-size:11px;font-weight:700;color:#e2e8f0;margin-bottom:14px;'>🏛️ 전략 회의실 — 연구원 × 마케터</div>"
+            "<div style='background:#334155;border-radius:40px;height:36px;margin:0 16px 10px;"
+            "display:flex;align-items:center;justify-content:center;border:2px solid #475569;'>"
+            "<span style='font-size:10px;color:#94a3b8;letter-spacing:1px;'>CONFERENCE TABLE</span></div>"
+            "<div style='display:flex;justify-content:space-around;align-items:center;margin-bottom:14px;'>"
+            "<div style='text-align:center;'><div style='font-size:28px;'>👨‍🔬</div>"
+            "<div style='font-size:9px;color:#93c5fd;margin-top:2px;'>시니어 연구원</div></div>"
+            "<div style='font-size:18px;color:#475569;'>⇄</div>"
+            "<div style='text-align:center;'><div style='font-size:28px;'>👩‍💼</div>"
+            "<div style='font-size:9px;color:#6ee7b7;margin-top:2px;'>마케터</div></div></div>"
+            "<div style='background:rgba(59,130,246,0.15);border-left:3px solid #3b82f6;"
+            "border-radius:0 6px 6px 0;padding:7px 10px;margin-bottom:7px;'>"
+            "<div style='font-size:10px;color:#93c5fd;'>👨‍🔬 &nbsp;\"배합비 최적화 완료 · Brix 12° 달성\"</div></div>"
+            "<div style='background:rgba(16,185,129,0.15);border-left:3px solid #10b981;"
+            "border-radius:0 6px 6px 0;padding:7px 10px;'>"
+            "<div style='font-size:10px;color:#6ee7b7;'>👩‍💼 &nbsp;\"저당 트렌드 부합 · 편의점 출시 추천\"</div></div>"
+            "</div>"
 
-  <!-- 회의실 풍경 -->
-  <div style="flex:1;min-width:200px;background:linear-gradient(160deg,#1e293b 0%,#0f172a 100%);
-  border-radius:12px;padding:18px;">
-    <div style="font-size:11px;font-weight:700;color:#e2e8f0;margin-bottom:14px;">
-    🏛️ 전략 회의실 — 연구원 × 마케터</div>
-
-    <!-- 회의 테이블 -->
-    <div style="background:#334155;border-radius:40px;height:36px;margin:0 16px 10px;
-    display:flex;align-items:center;justify-content:center;border:2px solid #475569;">
-      <span style="font-size:10px;color:#94a3b8;letter-spacing:1px;">CONFERENCE TABLE</span>
-    </div>
-
-    <!-- 참석자 -->
-    <div style="display:flex;justify-content:space-around;align-items:center;margin-bottom:14px;">
-      <div style="text-align:center;">
-        <div style="font-size:28px;">👨‍🔬</div>
-        <div style="font-size:9px;color:#93c5fd;margin-top:2px;">시니어 연구원</div>
-      </div>
-      <div style="font-size:18px;color:#475569;">⇄</div>
-      <div style="text-align:center;">
-        <div style="font-size:28px;">👩‍💼</div>
-        <div style="font-size:9px;color:#6ee7b7;margin-top:2px;">마케터</div>
-      </div>
-    </div>
-
-    <!-- 발언 카드 -->
-    <div style="background:rgba(59,130,246,0.15);border-left:3px solid #3b82f6;
-    border-radius:0 6px 6px 0;padding:7px 10px;margin-bottom:7px;">
-      <div style="font-size:10px;color:#93c5fd;">👨‍🔬 &nbsp;"배합비 최적화 완료 · Brix 12° 달성"</div>
-    </div>
-    <div style="background:rgba(16,185,129,0.15);border-left:3px solid #10b981;
-    border-radius:0 6px 6px 0;padding:7px 10px;">
-      <div style="font-size:10px;color:#6ee7b7;">👩‍💼 &nbsp;"저당 트렌드 부합 · 편의점 출시 추천"</div>
-    </div>
-  </div>
-
-</div>""", unsafe_allow_html=True)
+            "</div>",
+            unsafe_allow_html=True,
+        )
 
         st.caption("아래 스크립트를 복사해 AI에 붙여넣으세요.")
         st.code(
