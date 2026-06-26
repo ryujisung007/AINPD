@@ -4954,7 +4954,7 @@ elif section == "🔐 관리자 현황판":
                 else:
                     st.error("코드가 올바르지 않습니다.")
     else:
-        show_banner("관리자 현황판", "전체 접속자 · 과제별 제출 현황 · 진행률")
+        show_banner("관리자 현황판", "전체 접속자 · 과제별 제출 현황 · 진행률", "🔐")
 
         if st.button("🔄 새로고침", key="_dash_refresh", type="secondary"):
             st.rerun()
