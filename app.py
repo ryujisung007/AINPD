@@ -343,7 +343,8 @@ def _submit_hw(sheet_tab: str, student: str, content: str,
             ws = sh.add_worksheet(title=sheet_tab, rows=1000, cols=5)
             ws.append_row(_HW_HEADERS)
 
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+        from datetime import timezone, timedelta
+        timestamp = (datetime.now(timezone.utc) + timedelta(hours=9)).strftime("%Y-%m-%d %H:%M")
 
         # 셀에는 단축 텍스트, 전체 내용은 셀 메모(마우스 오버 팝업)에 저장
         def _cell_short(text: str, n: int = 80) -> str:
@@ -516,7 +517,8 @@ def _record_login(student: str):
         except Exception:
             ws = sh.add_worksheet(title="접속자현황", rows=200, cols=3)
             ws.append_row(["이름", "최초접속", "최근접속"])
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+        from datetime import timezone, timedelta
+        timestamp = (datetime.now(timezone.utc) + timedelta(hours=9)).strftime("%Y-%m-%d %H:%M")
         all_rows = ws.get_all_values()
         existing_idx = None
         for i, row in enumerate(all_rows):
@@ -564,7 +566,8 @@ def _submit_report_nb(student: str, nb_script: str):
         if existing_idx:
             ws.update_cell(existing_idx, 6, nb_cell)
         else:
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+            from datetime import timezone, timedelta
+            timestamp = (datetime.now(timezone.utc) + timedelta(hours=9)).strftime("%Y-%m-%d %H:%M")
             ws.append_row([timestamp, student, "", "", "", nb_cell])
         return True, ""
     except Exception as e:
