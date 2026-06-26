@@ -477,26 +477,7 @@ def _submit_hw(sheet_tab: str, student: str, content: str,
 
         sh.batch_update({"requests": _batch_reqs})
 
-        # 제출현황 탭에 학생 이름 추가 (D열부터 우측으로 확장)
-        try:
-            _sw = sh.worksheet("📊 제출현황")
-            # 시트 열이 부족하면 50열로 자동 확장 (기존 cols=3 탭 호환)
-            if _sw.col_count < 20:
-                _sw.resize(cols=50)
-            _sw_data = _sw.get_all_values()
-            for _sri, _sr in enumerate(_sw_data):
-                if _sri == 0:
-                    continue
-                if len(_sr) >= 2 and _sr[1] == sheet_tab:
-                    _existing_entries = [n for n in _sr[3:] if n.strip()]
-                    _plain_names = [n.split(". ", 1)[-1] if ". " in n else n for n in _existing_entries]
-                    if student not in _plain_names:
-                        _order = len(_existing_entries) + 1
-                        _next_col = _order + 3
-                        _sw.update_cell(_sri + 1, _next_col, f"{_order}. {student}")
-                    break
-        except Exception:
-            pass  # 제출현황 탭 없거나 실패해도 메인 제출은 성공
+        # D열 수식이 개별 시트 B열을 실시간 참조하므로 별도 기록 불필요
 
         return True, ""
     except Exception as e:
@@ -1263,23 +1244,20 @@ with st.sidebar:
                             [{"range": "A2", "values": _summary_rows}],
                             value_input_option="USER_ENTERED",
                         )
-                        # 기존 과제 탭 제출자 복원 — 읽기(batch) 1회 + 쓰기(batch) 1회
-                        try:
-                            _restore_ranges = ["'" + t + "'!B2:B1000" for _, t in _tab_sections]
-                            _batch_read = _sh.values_batch_get(_restore_ranges)
-                            _write_updates = []
-                            for _si, item in enumerate(_batch_read):
-                                _names = [r[0] for r in item.get("values", []) if r and r[0].strip()]
-                                if _names:
-                                    _numbered = [f"{i+1}. {n}" for i, n in enumerate(_names)]
-                                    _write_updates.append({
-                                        "range": f"D{_si+2}:AZ{_si+2}",
-                                        "values": [_numbered]
-                                    })
-                            if _write_updates:
-                                _sw.batch_update(_write_updates, value_input_option="RAW")
-                        except Exception:
-                            pass  # 복원 실패해도 공식(C열)이 실시간 집계하므로 무시
+                        # D열: 각 행마다 개별 시트 B열을 가로로 자동 펼치는 수식
+                        _d_formula_rows = []
+                        for _si in range(len(_tab_sections)):
+                            _row = _si + 2
+                            _f = ('=IFERROR(TRANSPOSE(ARRAYFORMULA('
+                                  'ROW(INDIRECT("A1:A"&COUNTA(INDIRECT("\'"&B' + str(_row) + '&"\'!B2:B1000"))))'
+                                  '&". "&FILTER(INDIRECT("\'"&B' + str(_row) + '&"\'!B2:B1000"),'
+                                  'INDIRECT("\'"&B' + str(_row) + '&"\'!B2:B1000")<>""))),"")' )
+                            _d_formula_rows.append([_f])
+                        _sh.values_update(
+                            "'📊 제출현황'!D2",
+                            params={"valueInputOption": "USER_ENTERED"},
+                            body={"values": _d_formula_rows},
+                        )
                         # 탭 순서: 제출현황 맨 앞 → _ALL_HW_TABS 순 → 그 외 탭
                         _all_ws = {w.title: w for w in _sh.worksheets()}
                         _ordered = [_sw]
