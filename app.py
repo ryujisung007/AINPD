@@ -272,9 +272,10 @@ def _get_gs_client():
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive",
     ]
-    creds = Credentials.from_service_account_info(
-        dict(st.secrets["gcp_service_account"]), scopes=scopes
-    )
+    creds_dict = dict(st.secrets["gcp_service_account"])
+    # TOML에서 \n이 문자 그대로 남는 경우 실제 개행으로 변환
+    creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+    creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
     return gspread.authorize(creds)
 
 
