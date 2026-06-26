@@ -505,27 +505,23 @@ def _submit_hw(sheet_tab: str, student: str, content: str,
 
 @st.cache_data(ttl=120, show_spinner=False)
 def _fetch_dashboard_data():
-    """관리자 현황판 데이터 — 배치 API 1회 호출 + 2분 캐시"""
+    """관리자 현황판 — 접속자현황 + 제출현황 2개 탭만 읽기 (API 2회, 2분 캐시)
+    제출현황 C열 공식이 각 과제 탭을 실시간 참조하므로 개별 탭 조회 불필요.
+    반환: (acc_rows, summary_rows)
+      acc_rows    : 접속자현황 전체 (헤더 포함)
+      summary_rows: 📊 제출현황 전체 (헤더 포함, C열=수식 계산값, D열~=제출자순서)
+    """
     gc = _get_gs_client()
     sh = gc.open_by_key(_GS_SHEET_ID)
-    ranges = ["접속자현황!A:C"] + [f"'{t}'!A:B" for t in _ALL_HW_TABS]
     try:
-        batch = sh.values_batch_get(ranges)
-        # values_batch_get 는 range 순서대로 ValueRange dict 리스트 반환
-        result = []
-        for item in batch:
-            result.append(item.get("values", []))
+        acc_data = sh.worksheet("접속자현황").get_all_values()
     except Exception:
-        # fallback: 개별 조회
-        result = []
-        for r in ranges:
-            try:
-                tab = r.split("'")[1] if "'" in r else r.split("!")[0]
-                ws = sh.worksheet(tab)
-                result.append(ws.get_all_values())
-            except Exception:
-                result.append([])
-    return result  # [접속자현황_rows, tab0_rows, tab1_rows, ...]
+        acc_data = []
+    try:
+        summary_data = sh.worksheet("📊 제출현황").get_all_values()
+    except Exception:
+        summary_data = []
+    return acc_data, summary_data
 
 
 def _record_login(student: str):
@@ -4987,43 +4983,30 @@ elif section == "🔐 관리자 현황판":
             st.rerun()
 
         try:
-            _dash_raw = _fetch_dashboard_data()  # 배치 1회 + 2분 캐시
+            _acc_data, _sum_data = _fetch_dashboard_data()  # API 2회 + 2분 캐시
 
-            # 접속자현황 (index 0)
-            _dacc_rows = _dash_raw[0][1:] if _dash_raw else []
-            _acc_names = [r[0] for r in _dacc_rows if r and r[0].strip()]
+            # 접속자 목록
+            _acc_names = [r[0] for r in _acc_data[1:] if r and r[0].strip()]
             _total_acc = len(_acc_names)
 
-            _dash_tab_labels = [
-                ("2️⃣ 연구원 페르소나",      "연구원_페르소나"),
-                ("2️⃣ 마케터 페르소나",      "마케터_페르소나"),
-                ("3️⃣ 데이터 수집 스크립트", "데이터수집스크립트"),
-                ("3️⃣ 데이터 학습지시",      "데이터학습지시"),
-                ("4️⃣ 온라인 시장분석",      "온라인시장분석"),
-                ("4️⃣ 식품전문정보분석",     "식품전문정보분석"),
-                ("4️⃣ 시장조사 학습",        "시장조사학습"),
-                ("4️⃣ 보고서 작성",          "보고서작성"),
-                ("5️⃣ 배합비 작성",          "배합비"),
-                ("5️⃣ 배합비 미션",          "배합비_미션"),
-                ("5️⃣ 배합비 프로세스",      "배합비_프로세스"),
-                ("6️⃣ 디지털트윈랩",         "디지털트윈랩"),
-                ("6️⃣ 가상소비자모델",       "가상소비자모델"),
-                ("6️⃣ 관능검사",             "관능검사"),
-                ("7️⃣ 프로젝트 정리",        "프로젝트정리"),
-            ]
-
-            _total_sub = 0
-            _total_possible = _total_acc * len(_dash_tab_labels)
+            # 제출현황 파싱 (헤더 제외, 빈 행·합계 행 제외)
             _tab_data = []
-            for _idx, (_lbl, _tname) in enumerate(_dash_tab_labels):
-                _rows = _dash_raw[_idx + 1][1:] if len(_dash_raw) > _idx + 1 else []
-                _sub_ordered = [(r[1], r[0]) for r in _rows if len(r) >= 2 and r[1].strip()]
-                _sub_names = [n for n, _ in _sub_ordered]
-                _total_sub += len(_sub_names)
-                _missing = [n for n in _acc_names if n not in _sub_names]
-                _tab_data.append((_lbl, _sub_ordered, _missing))
+            _total_sub = 0
+            for _row in _sum_data[1:]:
+                if not _row or not _row[0].strip() or _row[0] in ("", "전체 합계"):
+                    continue
+                _lbl      = _row[0]                          # A: 섹션·탭
+                _sub_cnt  = int(_row[2]) if len(_row) > 2 and str(_row[2]).isdigit() else 0
+                # D열(index 3)~ 제출자 이름 (순서 유지)
+                _sub_names = [c for c in _row[3:] if c.strip()]
+                # 순번 접두어 제거 ("1. 희동이" → "희동이")
+                _plain = [n.split(". ", 1)[-1] if ". " in n else n for n in _sub_names]
+                _missing  = [n for n in _acc_names if n not in _plain]
+                _total_sub += _sub_cnt
+                _tab_data.append((_lbl, _sub_names, _missing, _sub_cnt))
 
-            _overall_pct = int(_total_sub / _total_possible * 100) if _total_possible > 0 else 0
+            _total_possible = _total_acc * len(_tab_data)
+            _overall_pct = min(100, int(_total_sub / _total_possible * 100)) if _total_possible > 0 else 0
 
             _m1, _m2, _m3 = st.columns(3)
             _m1.metric("전체 접속 인원", f"{_total_acc}명")
@@ -5044,18 +5027,17 @@ elif section == "🔐 관리자 현황판":
             st.markdown("---")
             st.markdown("### 📋 과제별 제출 현황")
 
-            for _lbl, _sub_ordered, _missing in _tab_data:
-                _sub_cnt = len(_sub_ordered)
+            for _lbl, _sub_names, _missing, _sub_cnt in _tab_data:
                 _pct = min(100, int(_sub_cnt / _total_acc * 100) if _total_acc > 0 else 0)
-                _bar_w = min(100, _pct)
+                _bar_w = _pct
 
                 # 진행률 바 색상
                 _bar_color = "#22c55e" if _pct >= 100 else "#3b82f6" if _pct >= 50 else "#f59e0b"
                 _ordered_str = "&nbsp;›&nbsp;".join(
                     f"<span style='background:#dbeafe;padding:2px 9px;border-radius:5px;"
-                    f"font-size:15px;font-weight:600;'>{i+1}. {n}</span>"
-                    for i, (n, _) in enumerate(_sub_ordered)
-                ) if _sub_ordered else "<span style='color:#94a3b8;'>없음</span>"
+                    f"font-size:15px;font-weight:600;'>{n}</span>"
+                    for n in _sub_names
+                ) if _sub_names else "<span style='color:#94a3b8;'>없음</span>"
                 _missing_html = (
                     f"<div style='font-size:15px;color:#ef4444;margin-top:8px;'>"
                     f"<b>미제출:</b> {', '.join(_missing)}</div>"
