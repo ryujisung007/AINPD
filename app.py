@@ -1258,11 +1258,10 @@ with st.sidebar:
                             _summary_rows.append([_sec, _tab_name, _formula])
                         _summary_rows.append(["", "", ""])
                         _summary_rows.append(["전체 합계", "", "=SUM(C2:C" + str(1 + len(_ALL_HW_TABS)) + ")"])
-                        # values_update 사용: USER_ENTERED 옵션이 확실히 전달되어 수식으로 입력됨
-                        _sh.values_update(
-                            "'📊 제출현황'!A2",
-                            params={"valueInputOption": "USER_ENTERED"},
-                            body={"values": _summary_rows},
+                        # batch_update로 수식(USER_ENTERED) 입력 — 복원 코드와 동일 메서드
+                        _sw.batch_update(
+                            [{"range": "A2", "values": _summary_rows}],
+                            value_input_option="USER_ENTERED",
                         )
                         # 기존 과제 탭 제출자 복원 — 읽기(batch) 1회 + 쓰기(batch) 1회
                         try:
