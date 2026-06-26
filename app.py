@@ -1260,16 +1260,23 @@ with st.sidebar:
                         _summary_rows.append(["", "", ""])
                         _summary_rows.append(["전체 합계", "", "=SUM(C2:C" + str(1 + len(_ALL_HW_TABS)) + ")"])
                         _sw.update("A2", _summary_rows, value_input_option="USER_ENTERED")
-                        # 기존 과제 탭에서 제출자 이름 읽어 제출현황 D열 이후 복원 (순번 포함)
-                        for _si, (_sec, _tab_name) in enumerate(_tab_sections):
-                            try:
-                                _hw_ws = _sh.worksheet(_tab_name)
-                                _names = [r for r in _hw_ws.col_values(2)[1:] if r.strip()]
+                        # 기존 과제 탭 제출자 복원 — 읽기(batch) 1회 + 쓰기(batch) 1회
+                        try:
+                            _restore_ranges = ["'" + t + "'!B2:B1000" for _, t in _tab_sections]
+                            _batch_read = _sh.values_batch_get(_restore_ranges)
+                            _write_updates = []
+                            for _si, item in enumerate(_batch_read):
+                                _names = [r[0] for r in item.get("values", []) if r and r[0].strip()]
                                 if _names:
                                     _numbered = [f"{i+1}. {n}" for i, n in enumerate(_names)]
-                                    _sw.update(f"D{_si+2}", [_numbered])
-                            except Exception:
-                                pass
+                                    _write_updates.append({
+                                        "range": f"D{_si+2}:AZ{_si+2}",
+                                        "values": [_numbered]
+                                    })
+                            if _write_updates:
+                                _sw.batch_update(_write_updates, value_input_option="RAW")
+                        except Exception:
+                            pass  # 복원 실패해도 공식(C열)이 실시간 집계하므로 무시
                         # 탭 순서: 제출현황 맨 앞 → _ALL_HW_TABS 순 → 그 외 탭
                         _all_ws = {w.title: w for w in _sh.worksheets()}
                         _ordered = [_sw]
