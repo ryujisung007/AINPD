@@ -5032,24 +5032,34 @@ elif section == "🔐 관리자 현황판":
 
             for _lbl, _sub_ordered, _missing in _tab_data:
                 _sub_cnt = len(_sub_ordered)
-                _pct = int(_sub_cnt / _total_acc * 100) if _total_acc > 0 else 0
+                _pct = min(100, int(_sub_cnt / _total_acc * 100) if _total_acc > 0 else 0)
+                _bar_w = min(100, _pct)
 
                 # 진행률 바 색상
-                _bar_color = "#22c55e" if _pct == 100 else "#3b82f6" if _pct >= 50 else "#f59e0b"
+                _bar_color = "#22c55e" if _pct >= 100 else "#3b82f6" if _pct >= 50 else "#f59e0b"
+                _ordered_str = "&nbsp;›&nbsp;".join(
+                    f"<span style='background:#dbeafe;padding:2px 9px;border-radius:5px;"
+                    f"font-size:15px;font-weight:600;'>{i+1}. {n}</span>"
+                    for i, (n, _) in enumerate(_sub_ordered)
+                ) if _sub_ordered else "<span style='color:#94a3b8;'>없음</span>"
+                _missing_html = (
+                    f"<div style='font-size:15px;color:#ef4444;margin-top:8px;'>"
+                    f"<b>미제출:</b> {', '.join(_missing)}</div>"
+                ) if _missing else ""
                 st.markdown(f"""
-<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;
-padding:14px 18px;margin-bottom:10px;">
-<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-  <span style="font-size:14px;font-weight:700;color:#1e293b;">{_lbl}</span>
-  <span style="font-size:13px;font-weight:600;color:{_bar_color};">{_sub_cnt}/{_total_acc}명 &nbsp;({_pct}%)</span>
+<div style="background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:14px;
+padding:18px 22px;margin-bottom:14px;">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+  <span style="font-size:17px;font-weight:800;color:#1e293b;">{_lbl}</span>
+  <span style="font-size:16px;font-weight:700;color:{_bar_color};">{_sub_cnt}/{_total_acc}명 &nbsp;({_pct}%)</span>
 </div>
-<div style="background:#e2e8f0;border-radius:99px;height:6px;margin-bottom:10px;">
-  <div style="background:{_bar_color};width:{_pct}%;height:6px;border-radius:99px;"></div>
+<div style="background:#e2e8f0;border-radius:99px;height:8px;margin-bottom:12px;">
+  <div style="background:{_bar_color};width:{_bar_w}%;height:8px;border-radius:99px;"></div>
 </div>
-<div style="font-size:12px;color:#475569;">
-  <b>제출순서:</b> {"&nbsp;›&nbsp;".join(f"<span style='background:#dbeafe;padding:1px 6px;border-radius:4px;'>{i+1}. {n}</span>" for i,(n,_) in enumerate(_sub_ordered)) if _sub_ordered else "없음"}
+<div style="font-size:15px;color:#334155;line-height:2.0;">
+  <b>제출순서:</b>&nbsp; {_ordered_str}
 </div>
-{"<div style='font-size:12px;color:#ef4444;margin-top:6px;'><b>미제출:</b> " + ", ".join(_missing) + "</div>" if _missing else ""}
+{_missing_html}
 </div>""", unsafe_allow_html=True)
 
         except Exception as _de:
