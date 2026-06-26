@@ -487,12 +487,13 @@ def _submit_hw(sheet_tab: str, student: str, content: str,
                 if _sri == 0:
                     continue
                 if len(_sr) >= 2 and _sr[1] == sheet_tab:
-                    # D열(index 3)부터 이름 목록
+                    # D열(index 3)부터 순번+이름 목록 (예: "1. 홍길동")
                     _existing_names = [n for n in _sr[3:] if n.strip()]
-                    if student not in _existing_names:
-                        # 다음 빈 열: D=4번째열(1-based), 이미 n명이면 4+n
+                    _plain_names = [n.split(". ", 1)[-1] for n in _existing_names]
+                    if student not in _plain_names:
+                        _order = len(_existing_names) + 1
                         _next_col = len(_existing_names) + 4
-                        _sw.update_cell(_sri + 1, _next_col, student)
+                        _sw.update_cell(_sri + 1, _next_col, f"{_order}. {student}")
                     break
         except Exception:
             pass  # 제출현황 탭 없거나 실패해도 메인 제출은 성공
@@ -500,6 +501,34 @@ def _submit_hw(sheet_tab: str, student: str, content: str,
         return True, ""
     except Exception as e:
         return False, str(e)
+
+
+def _record_login(student: str):
+    """접속자현황 탭에 학생 접속 기록 (신규면 추가, 기존이면 최근접속시간 업데이트)"""
+    from datetime import datetime
+    try:
+        gc = _get_gs_client()
+        sh = gc.open_by_key(_GS_SHEET_ID)
+        try:
+            ws = sh.worksheet("접속자현황")
+        except Exception:
+            ws = sh.add_worksheet(title="접속자현황", rows=200, cols=3)
+            ws.append_row(["이름", "최초접속", "최근접속"])
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+        all_rows = ws.get_all_values()
+        existing_idx = None
+        for i, row in enumerate(all_rows):
+            if i == 0:
+                continue
+            if len(row) >= 1 and row[0] == student:
+                existing_idx = i + 1
+                break
+        if existing_idx:
+            ws.update_cell(existing_idx, 3, timestamp)
+        else:
+            ws.append_row([student, timestamp, timestamp])
+    except Exception:
+        pass
 
 
 def _submit_report_nb(student: str, nb_script: str):
@@ -1110,6 +1139,11 @@ if not st.session_state.get("authenticated"):
                 st.rerun()
     st.stop()
 
+# 로그인 상태에서 세션당 1회 접속 기록
+if st.session_state.get("authenticated") and not st.session_state.get("_login_recorded"):
+    _record_login(st.session_state["student_name"])
+    st.session_state["_login_recorded"] = True
+
 
 # =========================================================
 # 6. 사이드바
@@ -1157,6 +1191,65 @@ with st.sidebar:
                 st.session_state["_admin_verified"] = False
                 st.rerun()
             st.markdown("---")
+
+            # ── 접속자 현황 대시보드 ──
+            if st.button("🔄 현황 새로고침", key="_admin_refresh_btn", use_container_width=True):
+                st.rerun()
+            try:
+                _agc = _get_gs_client()
+                _ash = _agc.open_by_key(_GS_SHEET_ID)
+                # 전체 접속자 목록
+                try:
+                    _acc_ws = _ash.worksheet("접속자현황")
+                    _acc_names = [r[0] for r in _acc_ws.get_all_values()[1:] if r and r[0].strip()]
+                except Exception:
+                    _acc_names = []
+                _total = len(_acc_names)
+                st.metric("전체 접속 인원", f"{_total}명")
+
+                if _total > 0:
+                    # 과제별 제출자 읽기
+                    _tab_labels = [
+                        ("2️⃣ 연구원 페르소나",      "연구원_페르소나"),
+                        ("2️⃣ 마케터 페르소나",      "마케터_페르소나"),
+                        ("3️⃣ 데이터 수집 스크립트", "데이터수집스크립트"),
+                        ("3️⃣ 데이터 학습지시",      "데이터학습지시"),
+                        ("4️⃣ 온라인 시장분석",      "온라인시장분석"),
+                        ("4️⃣ 식품전문정보분석",     "식품전문정보분석"),
+                        ("4️⃣ 시장조사 학습",        "시장조사학습"),
+                        ("4️⃣ 보고서 작성",          "보고서작성"),
+                        ("5️⃣ 배합비 작성",          "배합비"),
+                        ("5️⃣ 배합비 미션",          "배합비_미션"),
+                        ("5️⃣ 배합비 프로세스",      "배합비_프로세스"),
+                        ("6️⃣ 디지털트윈랩",         "디지털트윈랩"),
+                        ("6️⃣ 가상소비자모델",       "가상소비자모델"),
+                        ("6️⃣ 관능검사",             "관능검사"),
+                        ("7️⃣ 프로젝트 정리",        "프로젝트정리"),
+                    ]
+                    _total_submitted = 0
+                    _total_possible = _total * len(_tab_labels)
+                    for _lbl, _tname in _tab_labels:
+                        try:
+                            _tw = _ash.worksheet(_tname)
+                            _submitted_names = set(r for r in _tw.col_values(2)[1:] if r.strip())
+                            _total_submitted += len(_submitted_names)
+                            _missing = [n for n in _acc_names if n not in _submitted_names]
+                            _pct = int(len(_submitted_names) / _total * 100)
+                            st.markdown(
+                                f"**{_lbl}** &nbsp; {len(_submitted_names)}/{_total}명 ({_pct}%)"
+                            )
+                            if _missing:
+                                st.caption("미제출: " + ", ".join(_missing))
+                        except Exception:
+                            st.caption(f"{_lbl} — 시트 없음")
+                    _overall_pct = int(_total_submitted / _total_possible * 100) if _total_possible > 0 else 0
+                    st.markdown("---")
+                    st.metric("전체 진행률", f"{_overall_pct}%",
+                              help=f"전체 제출 {_total_submitted} / 가능 {_total_possible}")
+            except Exception as _ae:
+                st.error(f"현황 조회 실패: {_ae}")
+
+            st.markdown("---")
             st.caption("구글 시트에 모든 과제 탭을 미리 생성합니다.")
             if st.button("📊 시트 탭 일괄 생성", key="_init_tabs_btn", use_container_width=True):
                 with st.spinner("시트 탭 생성 중..."):
@@ -1203,14 +1296,14 @@ with st.sidebar:
                         _summary_rows.append(["", "", ""])
                         _summary_rows.append(["전체 합계", "", f"=SUM(C2:C{1+len(_ALL_HW_TABS)})"])
                         _sw.update("A2", _summary_rows, value_input_option="USER_ENTERED")
-                        # 기존 과제 탭에서 제출자 이름 읽어 제출현황 D열 이후 복원
+                        # 기존 과제 탭에서 제출자 이름 읽어 제출현황 D열 이후 복원 (순번 포함)
                         for _si, (_sec, _tab_name) in enumerate(_tab_sections):
                             try:
                                 _hw_ws = _sh.worksheet(_tab_name)
                                 _names = [r for r in _hw_ws.col_values(2)[1:] if r.strip()]
                                 if _names:
-                                    _row_idx = _si + 2
-                                    _sw.update(f"D{_row_idx}", [_names])
+                                    _numbered = [f"{i+1}. {n}" for i, n in enumerate(_names)]
+                                    _sw.update(f"D{_si+2}", [_numbered])
                             except Exception:
                                 pass
                         # 탭 순서: 제출현황 맨 앞 → _ALL_HW_TABS 순 → 그 외 탭
