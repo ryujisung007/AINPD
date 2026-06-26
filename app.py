@@ -574,6 +574,40 @@ def _submit_report_nb(student: str, nb_script: str):
         return False, str(e)
 
 
+def _submit_process_hw(student: str, step1: str, step2: str, step3: str):
+    """배합비_프로세스: STEP1·2·3 결과를 C·D·E 열에 각각 분리 저장"""
+    from datetime import datetime, timezone, timedelta
+    try:
+        gc = _get_gs_client()
+        sh = gc.open_by_key(_GS_SHEET_ID)
+        try:
+            ws = sh.worksheet("배합비_프로세스")
+        except Exception:
+            ws = sh.add_worksheet(title="배합비_프로세스", rows=1000, cols=5)
+            ws.append_row(["제출일시", "이름", "STEP1 연구원훈련", "STEP2 배합비검증", "STEP3 마케터인터뷰"])
+        if ws.col_count < 5:
+            ws.resize(cols=5)
+        header = ws.row_values(1)
+        if len(header) < 5 or not header[2].strip():
+            ws.update("A1:E1", [["제출일시", "이름", "STEP1 연구원훈련", "STEP2 배합비검증", "STEP3 마케터인터뷰"]])
+        timestamp = (datetime.now(timezone.utc) + timedelta(hours=9)).strftime("%Y-%m-%d %H:%M")
+        all_rows = ws.get_all_values()
+        existing_idx = None
+        for i, row in enumerate(all_rows):
+            if i == 0:
+                continue
+            if len(row) >= 2 and row[1] == student:
+                existing_idx = i + 1
+                break
+        if existing_idx:
+            ws.update(f"C{existing_idx}:E{existing_idx}", [[step1, step2, step3]])
+        else:
+            ws.append_row([timestamp, student, step1, step2, step3])
+        return True, ""
+    except Exception as e:
+        return False, str(e)
+
+
 def _hw_ui(sheet_tab: str, content: str, btn_key: str,
            with_file: bool = False, show_ai_field: bool = True):
     """과제 제출 UI — 각 세션 하단에 공통으로 삽입"""
@@ -3896,8 +3930,56 @@ padding:14px 18px;margin:8px 0;">
         show_mission([
             "STEP 1 — 시니어 연구원 페르소나 생성 후 맛 프로파일 & 실험배합비 훈련",
             "STEP 2 — 훈련된 AI가 내 배합비를 검증·코칭",
-            "STEP 3 — 마케터 페르소나와 협의하여 최적안 도출",
+            "STEP 3 — 마케터 페르소나와 균형 잡힌 시각의 인터뷰 진행",
         ])
+
+        # ── 전략 회의 비주얼 ──────────────────────────
+        st.markdown("""
+<div style="background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%);
+border-radius:14px;padding:24px 28px;margin:8px 0 20px;">
+  <div style="font-size:10px;letter-spacing:3px;color:#94a3b8;margin-bottom:6px;">
+  PRODUCT DEVELOPMENT · STRATEGY SESSION</div>
+  <div style="font-size:18px;font-weight:800;color:#fff;margin-bottom:18px;">
+  🏛️ 제품개발 전략 회의 &nbsp;—&nbsp; 연구원 × 마케터</div>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;">
+    <div style="flex:1;min-width:130px;background:rgba(255,255,255,0.07);border-radius:10px;
+    padding:14px;border-top:3px solid #3b82f6;">
+      <div style="font-size:10px;color:#93c5fd;letter-spacing:1px;margin-bottom:6px;">STEP 1</div>
+      <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px;">👨‍🔬 시니어 연구원</div>
+      <div style="font-size:11px;color:#cbd5e1;">페르소나 생성<br>배합비 훈련</div>
+    </div>
+    <div style="flex:1;min-width:130px;background:rgba(255,255,255,0.07);border-radius:10px;
+    padding:14px;border-top:3px solid #f59e0b;">
+      <div style="font-size:10px;color:#fcd34d;letter-spacing:1px;margin-bottom:6px;">STEP 2</div>
+      <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px;">🔍 배합비 검증</div>
+      <div style="font-size:11px;color:#cbd5e1;">이화학·공정<br>코칭</div>
+    </div>
+    <div style="flex:1;min-width:130px;background:rgba(255,255,255,0.07);border-radius:10px;
+    padding:14px;border-top:3px solid #10b981;">
+      <div style="font-size:10px;color:#6ee7b7;letter-spacing:1px;margin-bottom:6px;">STEP 3</div>
+      <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px;">🤝 마케터 인터뷰</div>
+      <div style="font-size:11px;color:#cbd5e1;">균형 시각<br>전략 합의</div>
+    </div>
+  </div>
+  <div style="margin-top:16px;display:flex;gap:20px;flex-wrap:wrap;">
+    <div style="text-align:center;">
+      <div style="font-size:20px;font-weight:800;color:#3b82f6;">3</div>
+      <div style="font-size:10px;color:#94a3b8;">STEPS</div>
+    </div>
+    <div style="text-align:center;">
+      <div style="font-size:20px;font-weight:800;color:#f59e0b;">AI</div>
+      <div style="font-size:10px;color:#94a3b8;">POWERED</div>
+    </div>
+    <div style="text-align:center;">
+      <div style="font-size:20px;font-weight:800;color:#10b981;">360°</div>
+      <div style="font-size:10px;color:#94a3b8;">ANALYSIS</div>
+    </div>
+    <div style="text-align:center;">
+      <div style="font-size:20px;font-weight:800;color:#e2e8f0;">R&amp;D</div>
+      <div style="font-size:10px;color:#94a3b8;">× MKT</div>
+    </div>
+  </div>
+</div>""", unsafe_allow_html=True)
 
         _S1_PERSONA = (
             "식품개발 연구원의 보유한 식품지식과 실험이론을 20년 이상 경험한 시니어 연구원의 "
@@ -3993,11 +4075,13 @@ padding:14px 20px;margin-bottom:12px;">
             _combined_s1 = f"[시니어 연구원 페르소나 생성]\n{_S1_PERSONA}\n\n[훈련 항목]\n{_train_block}\n\n결과는 3줄 이내로 핵심만 요약해주세요."
             st.code(_combined_s1, language=None)
 
-        st.markdown("**STEP 1 결과 메모**")
-        st.caption("AI에게 스크립트를 입력한 후 결과를 **3줄 이내**로 요약해 입력하세요.")
-        st.text_area("s1_memo",
-                     placeholder="예) 시니어 연구원 생성 완료 / A 실험배합비 2kg 완성 / C 맛 엔진: 감미료 비율 재조정 권고",
-                     key="proc_step1", height=80, label_visibility="collapsed")
+        st.markdown("**📋 STEP 1 결과 — AI 출력 붙여넣기**")
+        st.caption("위 스크립트를 AI에 입력한 후 나온 결과를 그대로 붙여넣으세요.")
+        _s1_result = st.text_area("s1_memo",
+                     placeholder="AI가 출력한 시니어 연구원 페르소나 생성 & 훈련 결과를 여기에 붙여넣으세요.",
+                     key="proc_step1", height=120, label_visibility="collapsed")
+        if _s1_result and "\n" not in _s1_result and len(_s1_result) > 60:
+            st.warning("줄바꿈(Enter)이 없습니다. AI 결과 전체를 여러 줄로 붙여넣어 주세요.")
 
         # ── STEP 2: 배합비 검증 & 코칭 ─────────────────
         st.markdown("---")
@@ -4028,61 +4112,73 @@ padding:14px 20px;margin-bottom:12px;">
         if st.session_state.get("proc_s2_show"):
             st.code(_S2_RECALL, language=None)
 
-        st.markdown("**STEP 2 결과 메모**")
-        st.caption("AI 코칭 결과를 **3줄 이내**로 요약해 입력하세요.")
-        st.text_area("s2memo", placeholder="예) pH 3.8→3.6 조정 권고 / 구연산 투입 최종 단계로 변경 / 비타민C 0.05% 보강",
-                     key="proc_step2", height=80, label_visibility="collapsed")
+        st.markdown("**📋 STEP 2 결과 — AI 출력 붙여넣기**")
+        st.caption("위 스크립트를 AI에 입력한 후 나온 코칭 결과를 그대로 붙여넣으세요.")
+        _s2_result = st.text_area("s2memo", placeholder="AI가 출력한 배합비 검증·코칭 결과를 여기에 붙여넣으세요.",
+                     key="proc_step2", height=120, label_visibility="collapsed")
+        if _s2_result and "\n" not in _s2_result and len(_s2_result) > 60:
+            st.warning("줄바꿈(Enter)이 없습니다. AI 결과 전체를 여러 줄로 붙여넣어 주세요.")
 
-        # ── STEP 3: 마케터 페르소나와 협의 ──────────────
+        # ── STEP 3: 마케터 인터뷰 ────────────────────────
         st.markdown("---")
         st.markdown("""
-<div style="background:#f8fafc;border-left:4px solid #1e293b;border-radius:0 8px 8px 0;
+<div style="background:#f0fdf4;border-left:4px solid #10b981;border-radius:0 8px 8px 0;
 padding:14px 20px;margin-bottom:12px;">
-<div style="font-size:15px;font-weight:800;color:#0f172a;margin-bottom:4px;">
-🤝 STEP 3. 마케팅 페르소나 분석 → 최적안 도출</div>
-<div style="font-size:13px;color:#475569;">
-아래 스크립트로 기 설정된 마케팅 페르소나를 불러온 뒤, 확정 배합비에 대한
-시장성·관능·원가·차별화·시장 진입 관점의 항목별 분석을 요청하세요.
+<div style="font-size:15px;font-weight:800;color:#064e3b;margin-bottom:4px;">
+🤝 STEP 3. 마케터 페르소나 인터뷰 → 균형 잡힌 시각 도출</div>
+<div style="font-size:13px;color:#065f46;">
+아래 고정 스크립트를 AI에 입력하면 STEP 1·2의 연구원 훈련·검증 결과를 토대로
+마케터 페르소나가 균형 잡힌 시각으로 인터뷰를 진행합니다.
 </div></div>""", unsafe_allow_html=True)
 
-        _S3_RECALL = """앞서 설정된 마케팅 페르소나를 불러와주세요.
+        st.caption("아래 스크립트를 복사해 AI에 붙여넣으세요.")
+        st.code(
+            "이들의 step1,2,3을 시니어연구원의 훈련내용과 개선내용을 토대로 "
+            "마케터 페르소나의 균형잡힌 시각의 인터뷰를 진행해주세요.",
+            language=None,
+        )
 
-방금 확정된 신제품 배합비를 아래 항목별로 마케팅 관점에서 분석해주세요:
-1. 시장성 — 현재 시장 트렌드와의 부합도
-2. 관능 경쟁력 — 소비자 맛·향미 선호 관점 평가
-3. 원가 경쟁력 — 목표 판매가 대비 원가율 적정성
-4. 차별화 포인트 — 기존 경쟁 제품 대비 강점
-5. 시장 진입 가능성 — 출시 타이밍·채널 적합성
+        st.markdown("**📋 STEP 3 결과 — AI 인터뷰 결과 붙여넣기**")
+        st.caption("AI가 진행한 연구원 × 마케터 인터뷰 내용을 그대로 붙여넣으세요.")
+        _s3_result = st.text_area("s3memo",
+                     placeholder="AI가 출력한 마케터 인터뷰 결과를 여기에 붙여넣으세요.",
+                     key="proc_step3", height=150, label_visibility="collapsed")
+        if _s3_result and "\n" not in _s3_result and len(_s3_result) > 60:
+            st.warning("줄바꿈(Enter)이 없습니다. AI 결과 전체를 여러 줄로 붙여넣어 주세요.")
 
-결과는 3줄 이내로 핵심만 요약해주세요."""
-
-        if st.button("📋 마케팅 페르소나 불러오기 스크립트", key="proc_s3_recall_btn",
-                     use_container_width=True):
-            st.session_state["proc_s3_show"] = not st.session_state.get(
-                "proc_s3_show", False)
-        if st.session_state.get("proc_s3_show"):
-            st.code(_S3_RECALL, language=None)
-
-        st.markdown("**STEP 3 결과 메모**")
-        st.caption("AI 분석 결과를 **3줄 이내**로 요약해 입력하세요.")
-        st.text_area("s3memo", placeholder="예) 저당 트렌드 부합·시장성 우수 / 감귤 향미 차별화 강점 / 편의점 채널 단가 맞춤 조정 필요",
-                     key="proc_step3", height=80, label_visibility="collapsed")
-
-        # ── 과제 제출 ───────────────────────────────────
-        _proc_content = "\n".join([
-            f"개발 제품명: {st.session_state.get('bev_prodname', '미입력')}",
-            f"",
-            f"[STEP1 페르소나 생성 & 훈련 결과]",
-            f"{st.session_state.get('proc_step1', '')}",
-            f"",
-            f"[STEP2 배합비 검증·코칭 내용]",
-            f"{st.session_state.get('proc_step2', '')}",
-            f"",
-            f"[STEP3 마케팅 분석 결과 & 최종안]",
-            f"{st.session_state.get('proc_step3', '')}",
-        ])
-        # 파일링크 불필요: 공정 설계 스크립트는 텍스트 제출로 충분
-        _hw_ui("배합비_프로세스", _proc_content, "proc_hw_submit")
+        # ── 과제 제출 (STEP별 분리 저장) ────────────────
+        st.markdown("---")
+        st.markdown("##### 📤 과제 제출")
+        st.caption("STEP 1·2·3 결과가 모두 입력되면 제출 버튼을 누르세요. 각 STEP은 구글시트 별도 열에 저장됩니다.")
+        _proc_student = st.session_state.get("student_name", "")
+        if not _proc_student:
+            st.warning("과제를 제출하려면 먼저 로그인하세요.")
+        else:
+            _all_filled = bool(
+                st.session_state.get("proc_step1", "").strip() and
+                st.session_state.get("proc_step2", "").strip() and
+                st.session_state.get("proc_step3", "").strip()
+            )
+            if not _all_filled:
+                st.info("STEP 1·2·3 결과를 모두 입력해야 제출할 수 있습니다.")
+            _proc_btn = st.button(
+                "📤 개발 프로세스 제출",
+                key="proc_hw_submit",
+                type="primary",
+                disabled=not _all_filled,
+                use_container_width=True,
+            )
+            if _proc_btn:
+                _ok, _err = _submit_process_hw(
+                    _proc_student,
+                    st.session_state.get("proc_step1", ""),
+                    st.session_state.get("proc_step2", ""),
+                    st.session_state.get("proc_step3", ""),
+                )
+                if _ok:
+                    st.success(f"✅ **{_proc_student}** 님 제출 완료!")
+                else:
+                    st.error(f"제출 실패: {_err}")
 
 
 # ----------------------------------------------------------
