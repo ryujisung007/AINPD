@@ -3933,53 +3933,6 @@ padding:14px 18px;margin:8px 0;">
             "STEP 3 — 마케터 페르소나와 균형 잡힌 시각의 인터뷰 진행",
         ])
 
-        # ── 전략 회의 비주얼 ──────────────────────────
-        st.markdown("""
-<div style="background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%);
-border-radius:14px;padding:24px 28px;margin:8px 0 20px;">
-  <div style="font-size:10px;letter-spacing:3px;color:#94a3b8;margin-bottom:6px;">
-  PRODUCT DEVELOPMENT · STRATEGY SESSION</div>
-  <div style="font-size:18px;font-weight:800;color:#fff;margin-bottom:18px;">
-  🏛️ 제품개발 전략 회의 &nbsp;—&nbsp; 연구원 × 마케터</div>
-  <div style="display:flex;gap:12px;flex-wrap:wrap;">
-    <div style="flex:1;min-width:130px;background:rgba(255,255,255,0.07);border-radius:10px;
-    padding:14px;border-top:3px solid #3b82f6;">
-      <div style="font-size:10px;color:#93c5fd;letter-spacing:1px;margin-bottom:6px;">STEP 1</div>
-      <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px;">👨‍🔬 시니어 연구원</div>
-      <div style="font-size:11px;color:#cbd5e1;">페르소나 생성<br>배합비 훈련</div>
-    </div>
-    <div style="flex:1;min-width:130px;background:rgba(255,255,255,0.07);border-radius:10px;
-    padding:14px;border-top:3px solid #f59e0b;">
-      <div style="font-size:10px;color:#fcd34d;letter-spacing:1px;margin-bottom:6px;">STEP 2</div>
-      <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px;">🔍 배합비 검증</div>
-      <div style="font-size:11px;color:#cbd5e1;">이화학·공정<br>코칭</div>
-    </div>
-    <div style="flex:1;min-width:130px;background:rgba(255,255,255,0.07);border-radius:10px;
-    padding:14px;border-top:3px solid #10b981;">
-      <div style="font-size:10px;color:#6ee7b7;letter-spacing:1px;margin-bottom:6px;">STEP 3</div>
-      <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px;">🤝 마케터 인터뷰</div>
-      <div style="font-size:11px;color:#cbd5e1;">균형 시각<br>전략 합의</div>
-    </div>
-  </div>
-  <div style="margin-top:16px;display:flex;gap:20px;flex-wrap:wrap;">
-    <div style="text-align:center;">
-      <div style="font-size:20px;font-weight:800;color:#3b82f6;">3</div>
-      <div style="font-size:10px;color:#94a3b8;">STEPS</div>
-    </div>
-    <div style="text-align:center;">
-      <div style="font-size:20px;font-weight:800;color:#f59e0b;">AI</div>
-      <div style="font-size:10px;color:#94a3b8;">POWERED</div>
-    </div>
-    <div style="text-align:center;">
-      <div style="font-size:20px;font-weight:800;color:#10b981;">360°</div>
-      <div style="font-size:10px;color:#94a3b8;">ANALYSIS</div>
-    </div>
-    <div style="text-align:center;">
-      <div style="font-size:20px;font-weight:800;color:#e2e8f0;">R&amp;D</div>
-      <div style="font-size:10px;color:#94a3b8;">× MKT</div>
-    </div>
-  </div>
-</div>""", unsafe_allow_html=True)
 
         _S1_PERSONA = (
             "식품개발 연구원의 보유한 식품지식과 실험이론을 20년 이상 경험한 시니어 연구원의 "
@@ -4123,13 +4076,104 @@ padding:14px 20px;margin-bottom:12px;">
         st.markdown("---")
         st.markdown("""
 <div style="background:#f0fdf4;border-left:4px solid #10b981;border-radius:0 8px 8px 0;
-padding:14px 20px;margin-bottom:12px;">
+padding:14px 20px;margin-bottom:16px;">
 <div style="font-size:15px;font-weight:800;color:#064e3b;margin-bottom:4px;">
 🤝 STEP 3. 마케터 페르소나 인터뷰 → 균형 잡힌 시각 도출</div>
 <div style="font-size:13px;color:#065f46;">
 아래 고정 스크립트를 AI에 입력하면 STEP 1·2의 연구원 훈련·검증 결과를 토대로
 마케터 페르소나가 균형 잡힌 시각으로 인터뷰를 진행합니다.
 </div></div>""", unsafe_allow_html=True)
+
+        # ── 전략 지표 차트 + 회의실 비주얼 ──────────────
+        st.markdown("""
+<div style="display:flex;gap:14px;margin:4px 0 20px;flex-wrap:wrap;">
+
+  <!-- 전략 평가 차트 -->
+  <div style="flex:1;min-width:200px;background:#fff;border:1.5px solid #e2e8f0;
+  border-radius:12px;padding:18px;">
+    <div style="font-size:12px;font-weight:700;color:#0f172a;margin-bottom:2px;">
+    📊 제품 전략 평가 지표</div>
+    <div style="font-size:10px;color:#64748b;margin-bottom:14px;">연구원 × 마케터 협업 분석 (예시)</div>
+
+    <div style="margin-bottom:9px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
+        <span style="font-size:11px;color:#334155;">시장성</span>
+        <span style="font-size:11px;font-weight:700;color:#3b82f6;">85%</span>
+      </div>
+      <div style="background:#e2e8f0;border-radius:4px;height:8px;">
+        <div style="background:#3b82f6;width:85%;height:8px;border-radius:4px;"></div></div>
+    </div>
+    <div style="margin-bottom:9px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
+        <span style="font-size:11px;color:#334155;">관능 경쟁력</span>
+        <span style="font-size:11px;font-weight:700;color:#10b981;">72%</span>
+      </div>
+      <div style="background:#e2e8f0;border-radius:4px;height:8px;">
+        <div style="background:#10b981;width:72%;height:8px;border-radius:4px;"></div></div>
+    </div>
+    <div style="margin-bottom:9px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
+        <span style="font-size:11px;color:#334155;">원가 경쟁력</span>
+        <span style="font-size:11px;font-weight:700;color:#f59e0b;">68%</span>
+      </div>
+      <div style="background:#e2e8f0;border-radius:4px;height:8px;">
+        <div style="background:#f59e0b;width:68%;height:8px;border-radius:4px;"></div></div>
+    </div>
+    <div style="margin-bottom:9px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
+        <span style="font-size:11px;color:#334155;">차별화 포인트</span>
+        <span style="font-size:11px;font-weight:700;color:#8b5cf6;">90%</span>
+      </div>
+      <div style="background:#e2e8f0;border-radius:4px;height:8px;">
+        <div style="background:#8b5cf6;width:90%;height:8px;border-radius:4px;"></div></div>
+    </div>
+    <div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
+        <span style="font-size:11px;color:#334155;">시장 진입 가능성</span>
+        <span style="font-size:11px;font-weight:700;color:#ef4444;">78%</span>
+      </div>
+      <div style="background:#e2e8f0;border-radius:4px;height:8px;">
+        <div style="background:#ef4444;width:78%;height:8px;border-radius:4px;"></div></div>
+    </div>
+  </div>
+
+  <!-- 회의실 풍경 -->
+  <div style="flex:1;min-width:200px;background:linear-gradient(160deg,#1e293b 0%,#0f172a 100%);
+  border-radius:12px;padding:18px;">
+    <div style="font-size:11px;font-weight:700;color:#e2e8f0;margin-bottom:14px;">
+    🏛️ 전략 회의실 — 연구원 × 마케터</div>
+
+    <!-- 회의 테이블 -->
+    <div style="background:#334155;border-radius:40px;height:36px;margin:0 16px 10px;
+    display:flex;align-items:center;justify-content:center;border:2px solid #475569;">
+      <span style="font-size:10px;color:#94a3b8;letter-spacing:1px;">CONFERENCE TABLE</span>
+    </div>
+
+    <!-- 참석자 -->
+    <div style="display:flex;justify-content:space-around;align-items:center;margin-bottom:14px;">
+      <div style="text-align:center;">
+        <div style="font-size:28px;">👨‍🔬</div>
+        <div style="font-size:9px;color:#93c5fd;margin-top:2px;">시니어 연구원</div>
+      </div>
+      <div style="font-size:18px;color:#475569;">⇄</div>
+      <div style="text-align:center;">
+        <div style="font-size:28px;">👩‍💼</div>
+        <div style="font-size:9px;color:#6ee7b7;margin-top:2px;">마케터</div>
+      </div>
+    </div>
+
+    <!-- 발언 카드 -->
+    <div style="background:rgba(59,130,246,0.15);border-left:3px solid #3b82f6;
+    border-radius:0 6px 6px 0;padding:7px 10px;margin-bottom:7px;">
+      <div style="font-size:10px;color:#93c5fd;">👨‍🔬 &nbsp;"배합비 최적화 완료 · Brix 12° 달성"</div>
+    </div>
+    <div style="background:rgba(16,185,129,0.15);border-left:3px solid #10b981;
+    border-radius:0 6px 6px 0;padding:7px 10px;">
+      <div style="font-size:10px;color:#6ee7b7;">👩‍💼 &nbsp;"저당 트렌드 부합 · 편의점 출시 추천"</div>
+    </div>
+  </div>
+
+</div>""", unsafe_allow_html=True)
 
         st.caption("아래 스크립트를 복사해 AI에 붙여넣으세요.")
         st.code(
