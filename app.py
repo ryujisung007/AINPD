@@ -503,6 +503,31 @@ def _submit_hw(sheet_tab: str, student: str, content: str,
         return False, str(e)
 
 
+@st.cache_data(ttl=120, show_spinner=False)
+def _fetch_dashboard_data():
+    """관리자 현황판 데이터 — 배치 API 1회 호출 + 2분 캐시"""
+    gc = _get_gs_client()
+    sh = gc.open_by_key(_GS_SHEET_ID)
+    ranges = ["접속자현황!A:C"] + [f"'{t}'!A:B" for t in _ALL_HW_TABS]
+    try:
+        batch = sh.values_batch_get(ranges)
+        # values_batch_get 는 range 순서대로 ValueRange dict 리스트 반환
+        result = []
+        for item in batch:
+            result.append(item.get("values", []))
+    except Exception:
+        # fallback: 개별 조회
+        result = []
+        for r in ranges:
+            try:
+                tab = r.split("'")[1] if "'" in r else r.split("!")[0]
+                ws = sh.worksheet(tab)
+                result.append(ws.get_all_values())
+            except Exception:
+                result.append([])
+    return result  # [접속자현황_rows, tab0_rows, tab1_rows, ...]
+
+
 def _record_login(student: str):
     """접속자현황 탭에 학생 접속 기록 (신규면 추가, 기존이면 최근접속시간 업데이트)"""
     from datetime import datetime
@@ -1233,10 +1258,11 @@ with st.sidebar:
                         ]
                         _summary_rows = []
                         for _si, (_sec, _tab_name) in enumerate(_tab_sections):
-                            # 각 과제 탭의 B열(학생이름)을 직접 참조 → 일괄생성 재실행해도 수 유지
-                            _summary_rows.append([_sec, _tab_name, f"=IFERROR(COUNTA(INDIRECT(\"'\"&B{_si+2}&\"'!B2:B1000\")),0)"])
+                            # 탭 이름을 공식에 직접 삽입 → 시트 데이터 변경 즉시 반영
+                            _formula = "=IFERROR(COUNTA('" + _tab_name + "'!B2:B1000),0)"
+                            _summary_rows.append([_sec, _tab_name, _formula])
                         _summary_rows.append(["", "", ""])
-                        _summary_rows.append(["전체 합계", "", f"=SUM(C2:C{1+len(_ALL_HW_TABS)})"])
+                        _summary_rows.append(["전체 합계", "", "=SUM(C2:C" + str(1 + len(_ALL_HW_TABS)) + ")"])
                         _sw.update("A2", _summary_rows, value_input_option="USER_ENTERED")
                         # 기존 과제 탭에서 제출자 이름 읽어 제출현황 D열 이후 복원 (순번 포함)
                         for _si, (_sec, _tab_name) in enumerate(_tab_sections):
@@ -4957,24 +4983,17 @@ elif section == "🔐 관리자 현황판":
         show_banner("관리자 현황판", "전체 접속자 · 과제별 제출 현황 · 진행률", "🔐")
 
         if st.button("🔄 새로고침", key="_dash_refresh", type="secondary"):
+            _fetch_dashboard_data.clear()
             st.rerun()
 
         try:
-            _dgc = _get_gs_client()
-            _dsh = _dgc.open_by_key(_GS_SHEET_ID)
+            _dash_raw = _fetch_dashboard_data()  # 배치 1회 + 2분 캐시
 
-            # 전체 접속자
-            try:
-                _dacc = _dsh.worksheet("접속자현황")
-                _dacc_rows = _dacc.get_all_values()[1:]
-                _acc_names = [r[0] for r in _dacc_rows if r and r[0].strip()]
-                _acc_first = {r[0]: r[1] for r in _dacc_rows if len(r) >= 2 and r[0].strip()}
-            except Exception:
-                _acc_names, _acc_first = [], {}
-
+            # 접속자현황 (index 0)
+            _dacc_rows = _dash_raw[0][1:] if _dash_raw else []
+            _acc_names = [r[0] for r in _dacc_rows if r and r[0].strip()]
             _total_acc = len(_acc_names)
 
-            # 상단 지표
             _dash_tab_labels = [
                 ("2️⃣ 연구원 페르소나",      "연구원_페르소나"),
                 ("2️⃣ 마케터 페르소나",      "마케터_페르소나"),
@@ -4995,19 +5014,14 @@ elif section == "🔐 관리자 현황판":
 
             _total_sub = 0
             _total_possible = _total_acc * len(_dash_tab_labels)
-            _tab_data = []  # (lbl, submitted_list, missing_list)
-            for _lbl, _tname in _dash_tab_labels:
-                try:
-                    _tw = _dsh.worksheet(_tname)
-                    _sub_rows = _tw.get_all_values()[1:]
-                    # B열=이름, A열=제출시간 — 제출 순서대로 읽기
-                    _sub_ordered = [(r[1], r[0]) for r in _sub_rows if len(r) >= 2 and r[1].strip()]
-                    _sub_names = [n for n, _ in _sub_ordered]
-                    _total_sub += len(_sub_names)
-                    _missing = [n for n in _acc_names if n not in _sub_names]
-                    _tab_data.append((_lbl, _sub_ordered, _missing))
-                except Exception:
-                    _tab_data.append((_lbl, [], list(_acc_names)))
+            _tab_data = []
+            for _idx, (_lbl, _tname) in enumerate(_dash_tab_labels):
+                _rows = _dash_raw[_idx + 1][1:] if len(_dash_raw) > _idx + 1 else []
+                _sub_ordered = [(r[1], r[0]) for r in _rows if len(r) >= 2 and r[1].strip()]
+                _sub_names = [n for n, _ in _sub_ordered]
+                _total_sub += len(_sub_names)
+                _missing = [n for n in _acc_names if n not in _sub_names]
+                _tab_data.append((_lbl, _sub_ordered, _missing))
 
             _overall_pct = int(_total_sub / _total_possible * 100) if _total_possible > 0 else 0
 
