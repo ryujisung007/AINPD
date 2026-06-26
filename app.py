@@ -487,12 +487,11 @@ def _submit_hw(sheet_tab: str, student: str, content: str,
                 if _sri == 0:
                     continue
                 if len(_sr) >= 2 and _sr[1] == sheet_tab:
-                    # D열(index 3)부터 순번+이름 목록 (예: "1. 홍길동")
-                    _existing_names = [n for n in _sr[3:] if n.strip()]
-                    _plain_names = [n.split(". ", 1)[-1] for n in _existing_names]
+                    _existing_entries = [n for n in _sr[3:] if n.strip()]
+                    _plain_names = [n.split(". ", 1)[-1] if ". " in n else n for n in _existing_entries]
                     if student not in _plain_names:
-                        _order = len(_existing_names) + 1
-                        _next_col = len(_existing_names) + 4
+                        _order = len(_existing_entries) + 1
+                        _next_col = _order + 3
                         _sw.update_cell(_sri + 1, _next_col, f"{_order}. {student}")
                     break
         except Exception:
@@ -1167,6 +1166,7 @@ with st.sidebar:
             "5️⃣ 배합비 개발",
             "6️⃣ 가상모델 개발",
             "7️⃣ 프로젝트 정리",
+            "🔐 관리자 현황판",
         ],
         label_visibility="collapsed"
     )
@@ -1190,65 +1190,6 @@ with st.sidebar:
             if st.button("🚪 관리자 모드 종료", key="_admin_exit_btn", use_container_width=True):
                 st.session_state["_admin_verified"] = False
                 st.rerun()
-            st.markdown("---")
-
-            # ── 접속자 현황 대시보드 ──
-            if st.button("🔄 현황 새로고침", key="_admin_refresh_btn", use_container_width=True):
-                st.rerun()
-            try:
-                _agc = _get_gs_client()
-                _ash = _agc.open_by_key(_GS_SHEET_ID)
-                # 전체 접속자 목록
-                try:
-                    _acc_ws = _ash.worksheet("접속자현황")
-                    _acc_names = [r[0] for r in _acc_ws.get_all_values()[1:] if r and r[0].strip()]
-                except Exception:
-                    _acc_names = []
-                _total = len(_acc_names)
-                st.metric("전체 접속 인원", f"{_total}명")
-
-                if _total > 0:
-                    # 과제별 제출자 읽기
-                    _tab_labels = [
-                        ("2️⃣ 연구원 페르소나",      "연구원_페르소나"),
-                        ("2️⃣ 마케터 페르소나",      "마케터_페르소나"),
-                        ("3️⃣ 데이터 수집 스크립트", "데이터수집스크립트"),
-                        ("3️⃣ 데이터 학습지시",      "데이터학습지시"),
-                        ("4️⃣ 온라인 시장분석",      "온라인시장분석"),
-                        ("4️⃣ 식품전문정보분석",     "식품전문정보분석"),
-                        ("4️⃣ 시장조사 학습",        "시장조사학습"),
-                        ("4️⃣ 보고서 작성",          "보고서작성"),
-                        ("5️⃣ 배합비 작성",          "배합비"),
-                        ("5️⃣ 배합비 미션",          "배합비_미션"),
-                        ("5️⃣ 배합비 프로세스",      "배합비_프로세스"),
-                        ("6️⃣ 디지털트윈랩",         "디지털트윈랩"),
-                        ("6️⃣ 가상소비자모델",       "가상소비자모델"),
-                        ("6️⃣ 관능검사",             "관능검사"),
-                        ("7️⃣ 프로젝트 정리",        "프로젝트정리"),
-                    ]
-                    _total_submitted = 0
-                    _total_possible = _total * len(_tab_labels)
-                    for _lbl, _tname in _tab_labels:
-                        try:
-                            _tw = _ash.worksheet(_tname)
-                            _submitted_names = set(r for r in _tw.col_values(2)[1:] if r.strip())
-                            _total_submitted += len(_submitted_names)
-                            _missing = [n for n in _acc_names if n not in _submitted_names]
-                            _pct = int(len(_submitted_names) / _total * 100)
-                            st.markdown(
-                                f"**{_lbl}** &nbsp; {len(_submitted_names)}/{_total}명 ({_pct}%)"
-                            )
-                            if _missing:
-                                st.caption("미제출: " + ", ".join(_missing))
-                        except Exception:
-                            st.caption(f"{_lbl} — 시트 없음")
-                    _overall_pct = int(_total_submitted / _total_possible * 100) if _total_possible > 0 else 0
-                    st.markdown("---")
-                    st.metric("전체 진행률", f"{_overall_pct}%",
-                              help=f"전체 제출 {_total_submitted} / 가능 {_total_possible}")
-            except Exception as _ae:
-                st.error(f"현황 조회 실패: {_ae}")
-
             st.markdown("---")
             st.caption("구글 시트에 모든 과제 탭을 미리 생성합니다.")
             if st.button("📊 시트 탭 일괄 생성", key="_init_tabs_btn", use_container_width=True):
@@ -4984,3 +4925,131 @@ elif section == "7️⃣ 프로젝트 정리":
     # 파일링크 필요: 최종 결과물을 문서/PDF로 정리해 드라이브 링크로 제출
     # show_ai_field=False: 최종 정리 내용이 제출내용에 포함되므로 AI결과 별도 입력 불필요
     _hw_ui("프로젝트정리", _p7_final_content, "p7_hw_submit", with_file=True, show_ai_field=False)
+
+
+# ----------------------------------------------------------
+# 🔐 관리자 현황판
+# ----------------------------------------------------------
+elif section == "🔐 관리자 현황판":
+    if not st.session_state.get("_admin_verified"):
+        st.markdown("""
+        <div style="max-width:400px;margin:80px auto 0 auto;background:#fff;
+        border:1.5px solid #e2e8f0;border-radius:16px;padding:36px 32px;
+        box-shadow:0 4px 20px rgba(0,0,0,0.08);text-align:center;">
+        <div style="font-size:36px;margin-bottom:12px;">🔐</div>
+        <div style="font-size:18px;font-weight:800;color:#0f172a;margin-bottom:4px;">관리자 전용</div>
+        <div style="font-size:13px;color:#64748b;">관리자 코드를 입력하세요</div>
+        </div>
+        """, unsafe_allow_html=True)
+        _lc2, _cc2, _rc2 = st.columns([1, 1.2, 1])
+        with _cc2:
+            st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+            _adm_pw2 = st.text_input("관리자 코드", type="password", key="_adm_pw_main",
+                                     label_visibility="collapsed", placeholder="관리자 코드 입력")
+            if st.button("입장", key="_adm_enter_main", use_container_width=True, type="primary"):
+                if _adm_pw2 == _ADMIN_CODE:
+                    st.session_state["_admin_verified"] = True
+                    st.rerun()
+                else:
+                    st.error("코드가 올바르지 않습니다.")
+    else:
+        show_banner("관리자 현황판", "전체 접속자 · 과제별 제출 현황 · 진행률")
+
+        if st.button("🔄 새로고침", key="_dash_refresh", type="secondary"):
+            st.rerun()
+
+        try:
+            _dgc = _get_gs_client()
+            _dsh = _dgc.open_by_key(_GS_SHEET_ID)
+
+            # 전체 접속자
+            try:
+                _dacc = _dsh.worksheet("접속자현황")
+                _dacc_rows = _dacc.get_all_values()[1:]
+                _acc_names = [r[0] for r in _dacc_rows if r and r[0].strip()]
+                _acc_first = {r[0]: r[1] for r in _dacc_rows if len(r) >= 2 and r[0].strip()}
+            except Exception:
+                _acc_names, _acc_first = [], {}
+
+            _total_acc = len(_acc_names)
+
+            # 상단 지표
+            _dash_tab_labels = [
+                ("2️⃣ 연구원 페르소나",      "연구원_페르소나"),
+                ("2️⃣ 마케터 페르소나",      "마케터_페르소나"),
+                ("3️⃣ 데이터 수집 스크립트", "데이터수집스크립트"),
+                ("3️⃣ 데이터 학습지시",      "데이터학습지시"),
+                ("4️⃣ 온라인 시장분석",      "온라인시장분석"),
+                ("4️⃣ 식품전문정보분석",     "식품전문정보분석"),
+                ("4️⃣ 시장조사 학습",        "시장조사학습"),
+                ("4️⃣ 보고서 작성",          "보고서작성"),
+                ("5️⃣ 배합비 작성",          "배합비"),
+                ("5️⃣ 배합비 미션",          "배합비_미션"),
+                ("5️⃣ 배합비 프로세스",      "배합비_프로세스"),
+                ("6️⃣ 디지털트윈랩",         "디지털트윈랩"),
+                ("6️⃣ 가상소비자모델",       "가상소비자모델"),
+                ("6️⃣ 관능검사",             "관능검사"),
+                ("7️⃣ 프로젝트 정리",        "프로젝트정리"),
+            ]
+
+            _total_sub = 0
+            _total_possible = _total_acc * len(_dash_tab_labels)
+            _tab_data = []  # (lbl, submitted_list, missing_list)
+            for _lbl, _tname in _dash_tab_labels:
+                try:
+                    _tw = _dsh.worksheet(_tname)
+                    _sub_rows = _tw.get_all_values()[1:]
+                    # B열=이름, A열=제출시간 — 제출 순서대로 읽기
+                    _sub_ordered = [(r[1], r[0]) for r in _sub_rows if len(r) >= 2 and r[1].strip()]
+                    _sub_names = [n for n, _ in _sub_ordered]
+                    _total_sub += len(_sub_names)
+                    _missing = [n for n in _acc_names if n not in _sub_names]
+                    _tab_data.append((_lbl, _sub_ordered, _missing))
+                except Exception:
+                    _tab_data.append((_lbl, [], list(_acc_names)))
+
+            _overall_pct = int(_total_sub / _total_possible * 100) if _total_possible > 0 else 0
+
+            _m1, _m2, _m3 = st.columns(3)
+            _m1.metric("전체 접속 인원", f"{_total_acc}명")
+            _m2.metric("전체 진행률", f"{_overall_pct}%")
+            _m3.metric("총 제출 건수", f"{_total_sub}건")
+
+            st.markdown("---")
+
+            # 접속자 목록
+            with st.expander(f"👥 접속자 명단 ({_total_acc}명)", expanded=False):
+                if _acc_names:
+                    _acc_cols = st.columns(4)
+                    for _i, _nm in enumerate(_acc_names):
+                        _acc_cols[_i % 4].markdown(f"`{_i+1}. {_nm}`")
+                else:
+                    st.caption("아직 접속자가 없습니다.")
+
+            st.markdown("---")
+            st.markdown("### 📋 과제별 제출 현황")
+
+            for _lbl, _sub_ordered, _missing in _tab_data:
+                _sub_cnt = len(_sub_ordered)
+                _pct = int(_sub_cnt / _total_acc * 100) if _total_acc > 0 else 0
+
+                # 진행률 바 색상
+                _bar_color = "#22c55e" if _pct == 100 else "#3b82f6" if _pct >= 50 else "#f59e0b"
+                st.markdown(f"""
+<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;
+padding:14px 18px;margin-bottom:10px;">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+  <span style="font-size:14px;font-weight:700;color:#1e293b;">{_lbl}</span>
+  <span style="font-size:13px;font-weight:600;color:{_bar_color};">{_sub_cnt}/{_total_acc}명 &nbsp;({_pct}%)</span>
+</div>
+<div style="background:#e2e8f0;border-radius:99px;height:6px;margin-bottom:10px;">
+  <div style="background:{_bar_color};width:{_pct}%;height:6px;border-radius:99px;"></div>
+</div>
+<div style="font-size:12px;color:#475569;">
+  <b>제출순서:</b> {"&nbsp;›&nbsp;".join(f"<span style='background:#dbeafe;padding:1px 6px;border-radius:4px;'>{i+1}. {n}</span>" for i,(n,_) in enumerate(_sub_ordered)) if _sub_ordered else "없음"}
+</div>
+{"<div style='font-size:12px;color:#ef4444;margin-top:6px;'><b>미제출:</b> " + ", ".join(_missing) + "</div>" if _missing else ""}
+</div>""", unsafe_allow_html=True)
+
+        except Exception as _de:
+            st.error(f"현황 조회 오류: {_de}")
