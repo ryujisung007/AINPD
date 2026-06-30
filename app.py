@@ -378,7 +378,7 @@ def _submit_hw(sheet_tab: str, student: str, content: str,
                 break
 
         if existing_idx:
-            ws.update(f"A{existing_idx}:E{existing_idx}", [new_row])
+            ws.update([new_row], f"A{existing_idx}:E{existing_idx}")
             target_row = existing_idx
         else:
             ws.append_row(new_row)
@@ -589,7 +589,7 @@ def _submit_process_hw(student: str, step1: str, step2: str, step3: str):
             ws.resize(cols=5)
         header = ws.row_values(1)
         if len(header) < 5 or not header[2].strip():
-            ws.update("A1:E1", [["제출일시", "이름", "STEP1 연구원훈련", "STEP2 배합비검증", "STEP3 마케터인터뷰"]])
+            ws.update([["제출일시", "이름", "STEP1 연구원훈련", "STEP2 배합비검증", "STEP3 마케터인터뷰"]], "A1:E1")
         timestamp = (datetime.now(timezone.utc) + timedelta(hours=9)).strftime("%Y-%m-%d %H:%M")
         all_rows = ws.get_all_values()
         existing_idx = None
@@ -600,7 +600,7 @@ def _submit_process_hw(student: str, step1: str, step2: str, step3: str):
                 existing_idx = i + 1
                 break
         if existing_idx:
-            ws.update(f"C{existing_idx}:E{existing_idx}", [[step1, step2, step3]])
+            ws.update([[step1, step2, step3]], f"C{existing_idx}:E{existing_idx}")
         else:
             ws.append_row([timestamp, student, step1, step2, step3])
         return True, ""
