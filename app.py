@@ -10,6 +10,7 @@ import anthropic
 import os
 import random
 import json
+import re
 import pandas as pd
 
 # =========================================================
@@ -241,7 +242,7 @@ def get_client():
     return anthropic.Anthropic(api_key=api_key)
 
 
-def run_claude(prompt: str, system: str = "") -> str:
+def run_claude(prompt: str, system: str = "", max_tokens: int = 2000, model: str = "claude-sonnet-4-6") -> str:
     """Claude API 호출 - 스트리밍"""
     client = get_client()
     if not client:
@@ -249,13 +250,71 @@ def run_claude(prompt: str, system: str = "") -> str:
     try:
         with st.spinner("🤖 Claude가 분석 중입니다..."):
             messages = [{"role": "user", "content": prompt}]
-            kwargs = {"model": "claude-sonnet-4-6", "max_tokens": 2000, "messages": messages}
+            kwargs = {"model": model, "max_tokens": max_tokens, "messages": messages}
             if system:
                 kwargs["system"] = system
             response = client.messages.create(**kwargs)
             return response.content[0].text
     except Exception as e:
         return f"❌ 오류가 발생했습니다: {str(e)}"
+
+
+# 관리자 전용 더미 데이터 자동입력 버튼에서 사용 — 각 탭의 "스크립트 입력칸"·
+# "AI 생성결과 붙여넣기"란에 들어갈 내용을 실제 Claude 호출로 생성한다.
+_AI_DUMMY_FIELDS = {
+    "r_hw_submit_ai": "연구원 페르소나가 답한 것처럼, 신제품 배합비·원료 특성에 대한 전문적인 코멘트 3~4문장",
+    "m_hw_submit_ai": "마케터 페르소나가 답한 것처럼, 타깃·채널·포지셔닝 전략 코멘트 3~4문장",
+    "collect_hw_submit_ai": "데이터 수집 스크립트를 실행한 AI 결과처럼, 원료 단가·경쟁사 배합 데이터 요약 4~5문장",
+    "train_hw_submit_ai": "AI에게 데이터 학습을 지시한 결과처럼, 학습 반영 내용 요약 3~4문장",
+    "online_user_script": "온라인 시장분석을 요청하는 사용자 프롬프트 스크립트 (분석 플랫폼·제품 카테고리·분석 항목·출력 형식 포함) 5~7문장",
+    "food_user_script": "식품전문정보(원료 규제·트렌드) 분석을 요청하는 프롬프트 스크립트 5~7문장",
+    "learn_user_script": "시장조사 데이터를 AI에게 학습시키는 지시 스크립트 4~6문장",
+    "report_user_script": "시장분석 보고서 작성을 요청하는 스크립트 4~6문장",
+    "ai_transfer_hw_submit_ai": "Gemini가 생성한 대화 맥락 요약 결과처럼, 진행상황·핵심 결과물 요약 4~5문장",
+    "bev_preview": "배합비 스크립트 — 원료명과 비율을 나열한 텍스트 (정제수·당류·산미료·기능성성분 등 5개 이상 원료, 비율 합계 100%)",
+    "bev_hw_submit_ai": "AI가 생성한 배합비 시트 결과에 대한 설명 3~4문장",
+    "mv_note": "배합비 무결성 검증 소견 1~2문장",
+    "ms2_script": "배합비 시나리오(원가절감 또는 맛 개선) 대응을 요청하는 스크립트 4~6문장",
+    "bev_mission_hw_submit_ai": "미션 수행 결과 시트에 대한 AI 코멘트 2~3문장",
+    "proc_step1": "시니어 연구원 페르소나 훈련 결과 코멘트 2~3문장",
+    "proc_step2": "시니어 연구원 코칭 결과 코멘트 2~3문장",
+    "proc_step3": "마케팅 분석 및 최종안 결과 코멘트 2~3문장",
+    "twin_result": "디지털 트윈랩 실험 결과 메모 (3줄 이내)",
+    "con_hw_submit_ai": "가상 소비자 모델 제작 결과 — 패널 프로필 및 평가기준 설명 4~5문장",
+    "sen_result": "관능검사 결과 메모 (3줄 이내, 점수 포함)",
+    "r_career_gen": "연구원 페르소나 경력 소개 1문장 (제품 컨셉과 어울리는 전문분야 포함)",
+    "m_career_gen": "마케터 페르소나 경력 소개 1문장 (제품 컨셉과 어울리는 마케팅 경력 포함)",
+    "ml_cat_gen": "제품 카테고리명 (제품 컨셉과 일치, 예: 저당 기능성 탄산음료)",
+    "ml_theme_gen": "제품개발용 데이터 유형 설명 1문장 (제품 컨셉과 관련된 데이터, 예: 배합비 이론 및 소비자 트렌드 데이터)",
+}
+
+
+def _generate_ai_dummy_fields(tag: str):
+    """관리자용 더미 데이터 자동입력 — 위 필드들을 실제 Claude 호출 1회로 채운다. 실패 시 None."""
+    _desc = "\n".join(f'- "{k}": {v}' for k, v in _AI_DUMMY_FIELDS.items())
+    prompt = (
+        "음료 신제품 개발 실습 앱의 테스트용 더미 데이터를 생성해줘. "
+        "제품 컨셉을 자유롭게 하나 정하고, 아래 모든 항목이 그 컨셉과 앞뒤가 맞게 작성해줘.\n"
+        "각 값 맨 끝에 반드시 \"[테스트#" + tag + "]\" 표시를 붙여줘.\n\n"
+        f"{_desc}\n\n"
+        "다른 설명 없이, 위 키 이름을 그대로 사용한 JSON 오브젝트 하나만 출력해줘 (모든 값은 문자열)."
+    )
+    raw = run_claude(
+        prompt,
+        system="당신은 테스트 데이터 생성 도우미입니다. 반드시 유효한 JSON 객체만 출력하세요.",
+        max_tokens=8000,
+        model="claude-haiku-4-5-20251001",
+    )
+    if raw.startswith("⚠️") or raw.startswith("❌"):
+        return None
+    _match = re.search(r"\{.*\}", raw, re.DOTALL)
+    if not _match:
+        return None
+    try:
+        _parsed = json.loads(_match.group(0))
+    except Exception:
+        return None
+    return {k: str(v) for k, v in _parsed.items() if k in _AI_DUMMY_FIELDS}
 
 
 # =========================================================
@@ -508,7 +567,8 @@ def _fetch_dashboard_data():
 
 
 def _record_login(student: str):
-    """접속자현황 탭에 학생 접속 기록 (신규면 추가, 기존이면 최근접속시간 업데이트)"""
+    """접속자현황 탭에 학생 접속 기록 (신규면 추가, 기존이면 최근접속시간 업데이트)
+    IP는 학생에게 노출되지 않는 별도 숨김 탭(_접속IP기록)에만 매 접속마다 누적 기록한다."""
     from datetime import datetime
     try:
         gc = _get_gs_client()
@@ -532,6 +592,24 @@ def _record_login(student: str):
             ws.update_cell(existing_idx, 3, timestamp)
         else:
             ws.append_row([student, timestamp, timestamp])
+
+        try:
+            ip = str(st.context.ip_address or "")
+        except Exception:
+            ip = ""
+        _is_new_ip_tab = False
+        try:
+            ws_ip = sh.worksheet("_접속IP기록")
+        except Exception:
+            ws_ip = sh.add_worksheet(title="_접속IP기록", rows=1000, cols=3)
+            ws_ip.append_row(["이름", "IP주소", "접속시각"])
+            _is_new_ip_tab = True
+        ws_ip.append_row([student, ip, timestamp])
+        if _is_new_ip_tab:
+            try:
+                ws_ip.hide()
+            except Exception:
+                pass
     except Exception:
         pass
 
@@ -1316,6 +1394,69 @@ with st.sidebar:
                         st.success("📊 제출현황 탭도 업데이트됐습니다.")
                     except Exception as _e:
                         st.error(f"오류: {_e}")
+
+            st.markdown("---")
+            st.caption("모든 섹션·탭의 스크립트 입력칸·과제 제출란에 테스트용 더미 데이터를 채웁니다. (구글 시트에는 저장되지 않음 — 프로젝트 정리 반영 확인용)")
+            st.caption("⏳ 20개 항목을 한 번에 AI로 생성하므로 30~40초 정도 걸릴 수 있습니다. 완료될 때까지 기다려 주세요.")
+            if st.button("🎲 전체 섹션 더미 데이터 자동입력 (AI 생성)", key="_fill_dummy_btn", use_container_width=True):
+                _tag = str(random.randint(1000, 9999))
+
+                def _rtk(_theme):
+                    return _theme.replace(" ", "_").replace("·", "").replace(".", "")
+
+                _r_theme_now = st.session_state.get("r_theme_ml") or "🧃 음료개발연구원"
+                _m_theme_now = st.session_state.get("m_theme_ml") or "🧃 음료 브랜드마케터"
+                _r_rtk_now = _rtk(_r_theme_now)
+                _m_rtk_now = _rtk(_m_theme_now)
+
+                _dummy_scenario = random.choice(["📉 시나리오 A — 원가절감", "👅 시나리오 B — 맛 개선"])
+
+                # 짧은 값(이름·수치)은 그대로 무작위 생성, 나머지 "스크립트"·"AI 생성결과"는
+                # Claude를 한 번 호출해 서로 맥락이 통하는 실제 문장으로 채운다.
+                _dummy_values = {
+                    f"r_name_{_r_rtk_now}": f"테스트연구원_{_tag}",
+                    f"m_name_{_m_rtk_now}": f"테스트마케터_{_tag}",
+                    "bev_prodname": f"테스트음료_{_tag}",
+                    "mv_brix": f"11.{_tag[-1]} °Bx",
+                    "mv_acid": f"0.{_tag[-2:]}%",
+                    "mv_ph": "3.6",
+                    "mv_solid": f"8.{_tag[-1]}%",
+                    "mv_cost_missing": "없음",
+                    "mv_cost_100ml": f"{_tag}원",
+                    "mv_cost_total": f"{_tag}원/3L",
+                    "ms2_scenario": _dummy_scenario,
+                    "ms2_prev_scenario": _dummy_scenario,
+                }
+                # 페르소나 경력·제품 카테고리·데이터 유형의 기본값 (AI 생성 실패 시 대체용)
+                _fallback_r_career = f"[테스트#{_tag}] 음료 배합 연구 경력 12년, 관능평가·이화학분석 전문"
+                _fallback_m_career = f"[테스트#{_tag}] 식음료 브랜드 마케팅 경력 8년, 신제품 런칭 다수"
+                _fallback_ml_cat = f"[테스트#{_tag}] 저당 기능성 탄산음료"
+                _fallback_ml_theme = f"[테스트#{_tag}] 배합비 이론 및 소비자 트렌드 데이터"
+
+                _ai_fields = _generate_ai_dummy_fields(_tag)
+                if _ai_fields:
+                    # 이 4개는 AI가 정한 제품 컨셉과 맞물리도록 동적 키(rtk 포함)에 매핑
+                    _dummy_values[f"r_career_{_r_rtk_now}"] = _ai_fields.pop("r_career_gen", _fallback_r_career)
+                    _dummy_values[f"m_career_{_m_rtk_now}"] = _ai_fields.pop("m_career_gen", _fallback_m_career)
+                    _dummy_values["ml_cat_manual"] = _ai_fields.pop("ml_cat_gen", _fallback_ml_cat)
+                    _dummy_values["ml_theme_manual"] = _ai_fields.pop("ml_theme_gen", _fallback_ml_theme)
+                    _dummy_values.update(_ai_fields)
+                else:
+                    st.warning("⚠️ AI 생성 호출 실패 — 스크립트·AI결과란은 짧은 기본 문구로 대체합니다.")
+                    _dummy_values[f"r_career_{_r_rtk_now}"] = _fallback_r_career
+                    _dummy_values[f"m_career_{_m_rtk_now}"] = _fallback_m_career
+                    _dummy_values["ml_cat_manual"] = _fallback_ml_cat
+                    _dummy_values["ml_theme_manual"] = _fallback_ml_theme
+                    _dummy_values.update({
+                        k: f"[테스트#{_tag}] (AI 생성 실패로 기본 더미 문구 사용) {v}"
+                        for k, v in _AI_DUMMY_FIELDS.items()
+                        if k not in ("r_career_gen", "m_career_gen", "ml_cat_gen", "ml_theme_gen")
+                    })
+
+                for _k, _v in _dummy_values.items():
+                    st.session_state[_k] = _v
+                st.success(f"✅ 더미 데이터 #{_tag} 입력 완료 — 각 탭과 '7️⃣ 프로젝트 정리'에서 반영 여부를 확인하세요.")
+                st.rerun()
 
     st.markdown("---")
     if st.button("로그아웃", key="_logout_btn", use_container_width=True):
@@ -5091,14 +5232,16 @@ elif section == "7️⃣ 프로젝트 정리":
     ])
 
     # ── 1단계 페르소나 필드 복원 ───────────────────────────
-    _r_theme     = st.session_state.get("r_theme_ml") or ""
+    # r_theme_ml/m_theme_ml은 연구원·마케터 탭을 한 번도 열지 않으면 세션에 존재하지 않음 —
+    # 각 탭의 기본 선택값(pills default)과 동일한 값으로 대체해야 rtk/mtk가 일치함
+    _r_theme     = st.session_state.get("r_theme_ml") or "🧃 음료개발연구원"
     _r_rtk       = _r_theme.replace(" ", "_").replace("·", "").replace(".", "")
     _r_name      = st.session_state.get(f"r_name_{_r_rtk}", "")
     _r_career    = st.session_state.get(f"r_career_{_r_rtk}", "")
     _r_job_disp  = (st.session_state.get("r_theme_manual", "").strip()
                     or (_r_theme.split(" ", 1)[-1] if " " in _r_theme else _r_theme))
 
-    _m_theme     = st.session_state.get("m_theme_ml") or ""
+    _m_theme     = st.session_state.get("m_theme_ml") or "🧃 음료 브랜드마케터"
     _m_mtk       = _m_theme.replace(" ", "_").replace("·", "").replace(".", "")
     _m_name      = st.session_state.get(f"m_name_{_m_mtk}", "")
     _m_career    = st.session_state.get(f"m_career_{_m_mtk}", "")
@@ -5120,8 +5263,15 @@ elif section == "7️⃣ 프로젝트 정리":
     _r_proc2  = st.session_state.get("proc_step2", "")
     _r_proc3  = st.session_state.get("proc_step3", "")
     _r_twin   = st.session_state.get("twin_result", "")
-    _r_con    = st.session_state.get("con_memo", "")
+    _r_con    = st.session_state.get("con_hw_submit_ai", "")
     _r_sen    = st.session_state.get("sen_result", "")
+    _r_mv_brix = st.session_state.get("mv_brix", "")
+    _r_mv_acid = st.session_state.get("mv_acid", "")
+    _r_mv_ph   = st.session_state.get("mv_ph", "")
+    _r_mv_solid = st.session_state.get("mv_solid", "")
+    _r_mv_note  = st.session_state.get("mv_note", "")
+    _r_ms2_scn  = st.session_state.get("ms2_scenario", "") or "미선택"
+    _r_ms2_script = st.session_state.get("ms2_script", "")
 
     def _na(v, limit=300):
         if not v:
@@ -5174,6 +5324,15 @@ elif section == "7️⃣ 프로젝트 정리":
         st.text(_r_proc2 or "(아직 입력하지 않았습니다)")
         st.markdown("**STEP 3 마케팅 분석 & 최종안 결과**")
         st.text(_r_proc3 or "(아직 입력하지 않았습니다)")
+        st.markdown("**미션1 무결성 검증**")
+        st.text(
+            f"Brix: {_r_mv_brix or '미입력'} / 산도: {_r_mv_acid or '미입력'} / "
+            f"pH: {_r_mv_ph or '미입력'} / 고형분함량: {_r_mv_solid or '미입력'}\n"
+            f"검증소견: {_r_mv_note or '미입력'}"
+        )
+        st.markdown("**미션2 시나리오 대응**")
+        st.text(f"선택 시나리오: {_r_ms2_scn}")
+        st.text(_na(_r_ms2_script))
 
     with st.expander("🔬 3단계 — 가상모델 개발 결과", expanded=False):
         st.markdown("**디지털 트윈랩 결과**")
@@ -5222,7 +5381,9 @@ elif section == "7️⃣ 프로젝트 정리":
         (
             "[3단계 시장분석]\n"
             f"온라인: {_trunc(_r_online)}\n"
-            f"식품정보: {_trunc(_r_food)}"
+            f"식품정보: {_trunc(_r_food)}\n"
+            f"시장조사학습: {_trunc(_r_learn)}\n"
+            f"보고서작성: {_trunc(_r_report)}"
         ),
         (
             "[3단계 배합비 개발]\n"
@@ -5230,7 +5391,10 @@ elif section == "7️⃣ 프로젝트 정리":
             f"배합비: {_trunc(_r_bev)}\n"
             f"STEP1: {_r_proc1 or '미입력'}\n"
             f"STEP2: {_r_proc2 or '미입력'}\n"
-            f"STEP3: {_r_proc3 or '미입력'}"
+            f"STEP3: {_r_proc3 or '미입력'}\n"
+            f"미션1(무결성검증): Brix {_r_mv_brix or '미입력'} / 산도 {_r_mv_acid or '미입력'} / "
+            f"pH {_r_mv_ph or '미입력'} / 고형분함량 {_r_mv_solid or '미입력'} / 소견 {_r_mv_note or '미입력'}\n"
+            f"미션2(시나리오대응): {_r_ms2_scn} — {_trunc(_r_ms2_script)}"
         ),
         (
             "[3단계 가상모델 개발]\n"
