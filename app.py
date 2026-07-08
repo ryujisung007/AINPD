@@ -689,7 +689,7 @@ def _submit_process_hw(student: str, step1: str, step2: str, step3: str):
 
 def _hw_ui(sheet_tab: str, content: str, btn_key: str,
            with_file: bool = False, show_ai_field: bool = True, ai_label: str = "AI 생성결과",
-           title: str = "과제 제출"):
+           title: str = "과제 제출", guide_type: str = "gemini"):
     """과제 제출 UI — 각 세션 하단에 공통으로 삽입"""
     st.markdown("---")
     student = st.session_state.get("student_name", "")
@@ -721,12 +721,17 @@ def _hw_ui(sheet_tab: str, content: str, btn_key: str,
             placeholder="https://drive.google.com/...",
             key=f"{btn_key}_file",
         )
-        if st.button("🔗 공유 설정 방법 보기", key=f"{btn_key}_guide_btn",
+        guide_btn_label = ("🔗 GPT생성 파일 공유방법 보기(누름)" if guide_type == "gpt"
+                           else "🔗 공유 설정 방법 보기")
+        if st.button(guide_btn_label, key=f"{btn_key}_guide_btn",
                      use_container_width=False):
             st.session_state[f"{btn_key}_show_guide"] = not st.session_state.get(
                 f"{btn_key}_show_guide", False)
         if st.session_state.get(f"{btn_key}_show_guide"):
-            _show_share_guide()
+            if guide_type == "gpt":
+                _show_share_guide_gpt()
+            else:
+                _show_share_guide()
 
     col_btn, col_status = st.columns([1, 2])
     with col_btn:
@@ -772,6 +777,38 @@ padding:16px 20px;margin:8px 0;">
 &nbsp;&nbsp;• <span style="background:#e2e8f0;border-radius:4px;padding:1px 6px;font-size:12px;font-weight:600;">완료</span> 클릭<br><br>
 
 <b style="color:#0f172a;">③ 링크 복사 후 과제 제출란에 붙여넣기</b><br>
+&nbsp;&nbsp;• 공유 팝업 하단 <b>"링크 복사"</b> 클릭<br>
+&nbsp;&nbsp;• 복사된 링크를 아래 <b>파일 링크</b> 입력칸에 붙여넣기
+
+</div></div>""", unsafe_allow_html=True)
+
+
+def _show_share_guide_gpt():
+    st.markdown("""
+<div style="background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:10px;
+padding:16px 20px;margin:8px 0;">
+<div style="font-size:14px;font-weight:700;color:#0f172a;margin-bottom:12px;">
+📤 ChatGPT 생성 결과 파일로 공유하기</div>
+
+<div style="font-size:13px;color:#334155;line-height:1.9;">
+
+<b style="color:#0f172a;">① ChatGPT 결과 파일 링크 확인</b><br>
+&nbsp;&nbsp;• 생성 결과가 <b>파일 링크(파일 카드)</b>로 뜨는 경우<br>
+&nbsp;&nbsp;&nbsp;&nbsp;→ 해당 파일 링크를 우클릭 → <b>"링크 주소 복사"</b> 클릭 → 아래 ④번으로 이동<br>
+&nbsp;&nbsp;• 파일을 <b>다운로드</b>한 경우<br>
+&nbsp;&nbsp;&nbsp;&nbsp;→ 다운로드한 파일을 아래 <b>②번(구글 드라이브 업로드)</b>부터 진행<br><br>
+
+<b style="color:#0f172a;">② 구글 드라이브에 업로드</b><br>
+&nbsp;&nbsp;• (다운로드한 파일이 있는 경우) 구글 드라이브 접속 → <b>새로 만들기</b> → <b>파일 업로드</b><br>
+&nbsp;&nbsp;• 다운로드한 파일 선택 후 업로드<br><br>
+
+<b style="color:#0f172a;">③ 공유 링크 설정 (누구나 볼 수 있게)</b><br>
+&nbsp;&nbsp;• 업로드한 파일 우클릭 → <span style="background:#e2e8f0;border-radius:4px;padding:1px 6px;font-size:12px;font-weight:600;">공유</span> 클릭<br>
+&nbsp;&nbsp;• "일반 액세스" 항목 → <b>변경</b> 클릭<br>
+&nbsp;&nbsp;• <b>"링크가 있는 모든 사용자"</b> 선택 → 역할: <b>뷰어</b><br>
+&nbsp;&nbsp;• <span style="background:#e2e8f0;border-radius:4px;padding:1px 6px;font-size:12px;font-weight:600;">완료</span> 클릭<br><br>
+
+<b style="color:#0f172a;">④ 링크 복사 후 과제 제출란에 붙여넣기</b><br>
 &nbsp;&nbsp;• 공유 팝업 하단 <b>"링크 복사"</b> 클릭<br>
 &nbsp;&nbsp;• 복사된 링크를 아래 <b>파일 링크</b> 입력칸에 붙여넣기
 
@@ -1535,7 +1572,7 @@ if section == "🏠 교육 개요":
 <span style="background:#e0f2fe;border-radius:4px;padding:1px 6px;font-size:11px;">예) 음료신제품개발_2026 / 본인이름_음료개발</span></li>
 <li>아래 <b>수업용 학습용 자료 다운로드</b> 후 프로젝트 소스에 파일 등록<br>
 <span style="font-size:11px;color:#0284c7;">⚠️ OpenAI 프로젝트 소스는 최대 5개 파일</span></li>
-<li>교육 중 연구원 페르소나 스크립트 완성 후 <b>추가 등록</b></li>
+<li>(페르소나 스크립트 완성후) <b>프로젝트 지침으로 등록 예정</b></li>
 </ol>
 </div>""", unsafe_allow_html=True)
 
@@ -1548,13 +1585,13 @@ if section == "🏠 교육 개요":
 <span style="background:#dcfce7;border-radius:4px;padding:1px 6px;font-size:11px;">예) 음료개발연구원_페르소나 / 음료마케터_페르소나</span></li>
 <li><b>지침(Instructions)</b>에 페르소나 스크립트 붙여넣기<br>
 <span style="font-size:11px;color:#15803d;">(2️⃣ 제품개발 페르소나 섹션에서 작성)</span></li>
-<li>아래 학습용 자료를 <b>소스 파일로 첨부</b> 후 저장</li>
+<li>(페르소나 스크립트 완성후) <b>지침으로 등록예정</b></li>
 </ol>
 </div>""", unsafe_allow_html=True)
 
     st.markdown("---")
     st.markdown("### 📚 수업용 학습용 자료 다운로드")
-    st.caption("클릭하면 Google Drive에서 열립니다. 우측 상단 ⬇ 아이콘으로 다운로드하세요.")
+    st.caption("클릭하면 Google Drive에서 열립니다. 좌측 상단 ⬇ 아이콘으로 다운로드하세요.")
     st.markdown('<span style="background:#fef08a;border:1px solid #f59e0b;border-radius:4px;'
                 'padding:1px 6px;font-size:12px;font-weight:700;color:#92400e;">노란색</span> '
                 '<span style="font-size:13px;color:#475569;">배경 파일은 <b>필수 다운로드 자료</b>입니다.</span>',
@@ -1670,7 +1707,7 @@ elif section == "1️⃣ 신제품 개발 프로세스":
     )
 
     st.markdown("#### 📊 교육 진행 흐름도")
-    st.caption("아래 7단계는 이 교육 전체의 학습 순서입니다. 각 단계를 클릭해 해당 섹션으로 이동하세요.")
+    st.caption("아래 7단계는 이 교육 전체의 학습 순서입니다.")
 
     def _card(num, title, items):
         items_html = "<br>".join(items)
@@ -2575,17 +2612,20 @@ border:2px solid #fde047;margin:8px 0 4px 0;">
             else:
                 st.caption("스크립트를 작성한 뒤 체크리스트를 체크해보세요.")
 
-        # 파일링크 불필요: 온라인 시장분석 스크립트는 텍스트 제출로 충분
-        _hw_ui("온라인시장분석", st.session_state.get("online_user_script", ""), "online_hw_submit")
+            # 파일링크 불필요: 온라인 시장분석 스크립트는 텍스트 제출로 충분
+            _hw_ui("온라인시장분석", st.session_state.get("online_user_script", ""), "online_hw_submit")
 
     # ── 탭 2: 식품전문정보분석 ──
     with tab_food:
-        _fid_foodsafety = "1T3xNARxfKrgLKTiyhNPJWYYE5s_MoTSy"
         _btn_food_html = (
-            f'<a href="https://drive.google.com/file/d/{_fid_foodsafety}/view" target="_blank" '
+            f'<a href="https://docs.google.com/spreadsheets/d/1g65HD-20I2jsELoFtn0HlXmyL-f5-6ud/edit?usp=drive_link&ouid=117628977970091786229&rtpof=true&sd=true" target="_blank" '
+            f'style="display:inline-block;padding:8px 18px;background:#fef08a;border:1.5px solid #f59e0b;'
+            f'border-radius:8px;color:#92400e;font-weight:700;font-size:13px;text-decoration:none;margin-right:8px;">'
+            f'📥 과채주스 데이터 다운로드</a>'
+            f'<a href="https://docs.google.com/spreadsheets/d/1nDSvSvUCZLb9GheRSNI31fQQ1mDUrrDg/edit?usp=drive_link&ouid=117628977970091786229&rtpof=true&sd=true" target="_blank" '
             f'style="display:inline-block;padding:8px 18px;background:#fef08a;border:1.5px solid #f59e0b;'
             f'border-radius:8px;color:#92400e;font-weight:700;font-size:13px;text-decoration:none;">'
-            f'📥 식품안전나라 품목제조보고서 데이터 다운로드</a>'
+            f'📥 혼합음료 데이터 다운로드</a>'
         )
 
         sub_food_ex, sub_food_task = st.tabs(["📖 예시 스크립트", "📋 스크립트 작성 과제"])
@@ -3075,9 +3115,15 @@ font-size:15px;color:#1d4ed8;font-weight:700;line-height:1.7;">🎯 학습자 �
         st.markdown("---")
 
         # ── 2-1. 변환 스크립트로 NotebookLM 지침 만들기 ──
-        st.markdown("**① ChatGPT로 NotebookLM 지침 스크립트 만들기**")
-        st.markdown('<span style="color:#000000;font-weight:600;">방금 출력한 ChatGPT 보고서를 노트북LM용 스크립트로 변환해줍니다.</span>',
+        st.markdown("**① ChatGPT 안에서 NotebookLM용 스크립트 만들기**")
+        st.markdown('<span style="color:#000000;font-weight:600;">방금 출력한 ChatGPT 보고서를 노트북LM용 스크립트로 변환해줍니다. (아래 스크립트는 ChatGPT 대화창에 그대로 입력하세요)</span>',
                      unsafe_allow_html=True)
+        st.markdown(
+            '<span style="display:inline-block;background:#10a37f;color:#ffffff;font-size:12px;'
+            'font-weight:700;border-radius:6px;padding:3px 10px;margin:6px 0 2px 0;">'
+            '💬 ChatGPT 채팅창</span>',
+            unsafe_allow_html=True,
+        )
         st.code(
             "방금 작성한 신제품 음료 개발 시장 분석 보고서를 NotebookLM 슬라이드 생성 지침으로 변환해줘.",
             language=None,
@@ -3133,10 +3179,26 @@ font-size:15px;color:#1d4ed8;font-weight:700;line-height:1.7;">🎯 학습자 �
 
         # ── 2-3. 지침 입력 & 생성 ──
         st.markdown("**③ 지침 입력 후 슬라이드 생성**")
+        st.markdown(
+            '<span style="display:inline-block;background:#4285f4;color:#ffffff;font-size:12px;'
+            'font-weight:700;border-radius:6px;padding:3px 10px;margin:2px 0 6px 0;">'
+            '📓 NotebookLM 작업화면</span>',
+            unsafe_allow_html=True,
+        )
         st.caption("소스만 추가하고 바로 생성 버튼을 누르면 NotebookLM 기본값으로 생성되어, 신제품 3개 도출 같은 미션 항목이 빠질 수 있습니다. 아래 순서로 진행하세요.")
-        st.markdown("""1. 좌측 소스 목록에서 방금 추가한 소스가 **체크(선택)**되어 있는지 확인
-2. Studio 패널의 슬라이드(프레젠테이션) 생성 아이콘 옆 **'맞춤 설정(Customize)'** 클릭
-3. ①에서 ChatGPT가 만들어준 지침을 붙여넣고 생성""")
+        st.markdown("""
+<ol style="font-size:15px;color:#334155;line-height:2.0;padding-left:20px;margin:0;">
+<li>좌측 소스 목록에서 방금 추가한 소스가 <b>체크(선택)</b>되어 있는지 확인</li>
+<li>Studio 패널에서 <b>'슬라이드자료'의 아이콘(맞춤설정)</b> 클릭</li>
+<li>추가 설정 항목 선택
+  <ul style="margin:6px 0;">
+    <li>형식: 자세한 자료 or <span style="background:#fef08a;border-radius:4px;padding:1px 6px;font-weight:700;">발표자 슬라이드</span></li>
+    <li>길이: 짧게 or <span style="background:#fef08a;border-radius:4px;padding:1px 6px;font-weight:700;">기본값</span></li>
+  </ul>
+</li>
+<li>①에서 ChatGPT가 만들어준 지침을 붙여넣고 생성</li>
+</ol>
+""", unsafe_allow_html=True)
         st.caption("기본 지침 예시 (①에서 만든 스크립트가 없다면 아래처럼 직접 입력해도 됩니다)")
         st.code("보고서를 작성하고, 2026년 신제품으로 추천할 3개 품목을 도출해줘.", language=None)
         st.caption("💡 표·그래프나 특정 항목을 더 강조하고 싶다면, ChatGPT에 요청할 때 자유롭게 추가해도 됩니다. (예: '표 또는 그래프 1개 이상 포함해줘')")
@@ -3168,7 +3230,7 @@ ChatGPT(OpenAI)에서 진행한 음료 개발 프로젝트 업무를 <b>Gemini �
         st.markdown("""<div style="background:#f8fafc;border-radius:10px;padding:12px 18px;
 border:1.5px solid #cbd5e1;margin-bottom:12px;">
 <span style="font-size:15px;font-weight:700;color:#1e293b;">
-Step 1 &nbsp;·&nbsp; ChatGPT가 출력한 요약·변환 스크립트를 Gemini에 붙여넣으세요
+Round 1 &nbsp;·&nbsp; ChatGPT가 출력한 요약·변환 스크립트를 Gemini에 붙여넣으세요
 </span><br>
 <span style="font-size:13px;color:#64748b;">출력된 내용을 그대로 복사해 Gemini 새 대화창에 붙여넣으면 맥락이 전달됩니다.</span>
 </div>""", unsafe_allow_html=True)
@@ -3201,6 +3263,7 @@ font-size:14px;font-weight:800;display:inline-block;margin-bottom:10px;">STEP {n
                 "• 설명 – 어떤 Gem이고 무슨 역할인지 작성<br>"
                 "• <b>요청사항</b> – ChatGPT의 페르소나를 그대로 붙여넣기<br>"
                 "• 기본 도구 – 그대로 두어도 무방"), unsafe_allow_html=True)
+            st.markdown("**📌 페르소나 스크립트는 ChatGPT에서 생성한 페르소나를 불러와서 입력 (연구원, 마케터 모두 입력)**")
         with _ga2:
             st.markdown(_gem_arr, unsafe_allow_html=True)
         with _g3:
@@ -3210,15 +3273,10 @@ font-size:14px;font-weight:800;display:inline-block;margin-bottom:10px;">STEP {n
                 "2. 추가지식 업로드 – 품목제조보고서, 수집 빅데이터 등 학습용 자료"), unsafe_allow_html=True)
             st.markdown("**📌 수업사전 준비시 제미나이 GEM에 업로드한 파일 + 추가 지식 업로드**")
 
-        _, _ga3, _g4, _ga4, _g5 = st.columns([3, 0.5, 3, 0.5, 3])
-        with _ga3:
-            st.markdown(_gem_arr, unsafe_allow_html=True)
-        with _g4:
-            st.markdown(_gem_card(4, "대화 시작", "저장 후 Step 2의 <b>요약·변환 스크립트</b>를 첫 메시지로 붙여넣기"), unsafe_allow_html=True)
-        with _ga4:
-            st.markdown(_gem_arr, unsafe_allow_html=True)
-        with _g5:
-            st.markdown(_gem_card(5, "이어서 작업", '이후 <b>"위 내용을 바탕으로 [다음 작업]을 진행해줘"</b> 형태로 명령'), unsafe_allow_html=True)
+        st.markdown("**📋 ChatGPT에서 페르소나 스크립트 불러오기**")
+        st.caption("아래 스크립트를 ChatGPT 대화창에 붙여넣으면 지금까지 만든 연구원·마케터 페르소나 스크립트를 다시 출력받을 수 있습니다. 출력된 내용을 복사해 위 '요청사항'에 붙여넣으세요.")
+        st.code("""지금까지 이 프로젝트에서 만든 연구원 페르소나 스크립트와 마케터 페르소나 스크립트를
+각각 처음부터 끝까지 그대로 출력해줘. 두 페르소나를 구분해서 순서대로 출력해줘.""", language=None)
 
         st.markdown('<div style="margin-top:16px;"><b>💡 Gems 소스는 최대 10개까지 등록할 수 있습니다.<br>'
                      '\'제품개발용 데이터\'에서 수집한 자료가 있다면 함께 추가로 넣는 것을 권장합니다.</b></div>',
@@ -3230,7 +3288,7 @@ font-size:14px;font-weight:800;display:inline-block;margin-bottom:10px;">STEP {n
         st.markdown("""<div style="background:#f8fafc;border-radius:10px;padding:12px 18px;
 border:1.5px solid #cbd5e1;margin-bottom:12px;">
 <span style="font-size:15px;font-weight:700;color:#1e293b;">
-Step 2 &nbsp;·&nbsp; 현재 AI(ChatGPT)에 아래 스크립트를 입력하세요
+Round 2 &nbsp;·&nbsp; 현재 AI(ChatGPT)에 아래 스크립트를 입력하세요
 </span><br>
 <span style="font-size:13px;color:#64748b;">대화 맥락과 결과물을 다른 AI가 이해할 수 있는 형태로 요약·변환해달라고 요청합니다.</span>
 </div>""", unsafe_allow_html=True)
@@ -3245,9 +3303,9 @@ Step 2 &nbsp;·&nbsp; 현재 AI(ChatGPT)에 아래 스크립트를 입력하세�
         st.markdown("""<div style="background:#f8fafc;border-radius:10px;padding:12px 18px;
 border:1.5px solid #cbd5e1;margin-bottom:12px;">
 <span style="font-size:15px;font-weight:700;color:#1e293b;">
-Step 3 &nbsp;·&nbsp; Gemini가 출력한 결과를 제출하세요
+Round 3 &nbsp;·&nbsp; Gemini가 출력한 결과를 제출하세요
 </span><br>
-<span style="font-size:13px;color:#64748b;">Step 2에서 생성한 제미나이용 입력 스크립트를 Gemini에 붙여넣은 뒤, Gemini가 출력한 결과를 그대로 붙여넣어 제출하세요.</span>
+<span style="font-size:13px;color:#64748b;">Round 2에서 생성한 제미나이용 입력 스크립트를 Gemini에 붙여넣은 뒤, Gemini가 출력한 결과를 그대로 붙여넣어 제출하세요.</span>
 </div>""", unsafe_allow_html=True)
 
         _hw_ui(
@@ -3663,7 +3721,7 @@ elif section == "3️⃣ 제품개발용 데이터":
         d_fields = {"분석 범위": d_scope, "출력 형식": d_output, "요청사항": d_request}
         d_defaults = {"분석 범위": dp["분석 범위"], "출력 형식": dp["출력 형식"], "요청사항": _REQ_DEFAULT}
         render_data_coach(prompt_d, d_fields, d_defaults, f"d_{dtk}")
-        _hw_ui("데이터수집스크립트", prompt_d, "collect_hw_submit", with_file=True)
+        _hw_ui("데이터수집스크립트", prompt_d, "collect_hw_submit", with_file=True, guide_type="gpt")
 
     with tab_project:
         st.markdown("#### ChatGPT 프로젝트에 데이터 소스 추가하기")
@@ -3682,10 +3740,13 @@ elif section == "3️⃣ 제품개발용 데이터":
 3. ChatGPT 새 대화창에 붙여넣기 → AI가 데이터 정리 결과 출력
 4. AI 결과를 전체 선택 → 복사""")
 
-        st.markdown("##### STEP 3. 프로젝트 소스 파일로 저장·추가")
-        show_example("""1. AI 결과를 메모장(Notepad)에 붙여넣기
-2. '원료레퍼런스_저당음료.txt' 등 파일명으로 저장
-3. ChatGPT 프로젝트 → '파일 추가' → 저장한 파일 업로드""")
+        st.markdown("##### STEP 3. ChatGPT 프로젝트에 소스로 추가하기")
+        show_example("""1. STEP2에서 받은 결과 파일 준비
+   - 파일 링크로 뜬 경우 → 링크 클릭해 파일 다운로드
+   - 이미 다운로드된 경우 → 해당 파일 그대로 사용
+2. ChatGPT 프로젝트 열기 → '파일 추가'(소스 추가) 클릭
+3. 준비한 파일 선택 → 업로드
+4. 프로젝트 소스 목록에 파일이 표시되는지 확인""")
 
         st.markdown("##### STEP 4. 프로젝트 내에서 AI에게 참조 요청")
         show_example("""같은 프로젝트에서 새 대화 시작 후:
