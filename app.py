@@ -469,6 +469,31 @@ _SUBMIT_INSTRUCTION = (
 
 
 
+@st.cache_resource(show_spinner=False)
+def _playwright_ready() -> bool:
+    """크롤링 실행이 가능한 환경인지 판별.
+
+    Streamlit Cloud에는 playwright 브라우저 바이너리를 넣을 수 없어 실행이 안 된다.
+    파이썬 패키지와 브라우저 설치 폴더가 모두 있어야 True.
+    """
+    try:
+        import playwright  # noqa: F401
+    except Exception:
+        return False
+    import glob
+    import os
+    cands = [
+        os.environ.get("PLAYWRIGHT_BROWSERS_PATH", ""),
+        os.path.expandvars(r"%LOCALAPPDATA%\ms-playwright"),
+        os.path.expanduser("~/.cache/ms-playwright"),
+        os.path.expanduser("~/Library/Caches/ms-playwright"),
+    ]
+    for c in cands:
+        if c and os.path.isdir(c) and glob.glob(os.path.join(c, "chromium*")):
+            return True
+    return False
+
+
 @st.cache_data(ttl=60, show_spinner=False)
 def _get_hw_count(sheet_tab: str) -> int:
     """해당 탭의 제출 인원 수 반환 (1분 캐시)"""
@@ -3063,6 +3088,14 @@ AI는 **화면을 볼 수 없습니다.** 그래서 "마켓컬리에서 음료 �
 
         # ══════════ 수집 코드 실행하기 ══════════
         with sub_code:
+            _can_exec = _playwright_ready()
+            if not _can_exec:
+                st.warning(
+                    "⚠️ **이 화면(온라인 배포본)에서는 코드 실행이 꺼져 있습니다.** "
+                    "크롤링은 강사 PC에서만 돌아갑니다. 강사 시연 화면을 보시고, "
+                    "여기서는 **스크립트 작성까지** 진행하세요."
+                )
+
             st.markdown("##### 🐍 받은 코드를 여기서 실행해보기")
             st.info("① 앞 탭 요청문 복사 → ② ChatGPT에 붙여넣기 → "
                     "③ **ChatGPT가 준 파이썬 코드**를 아래에 붙여넣고 실행")
@@ -3086,7 +3119,8 @@ AI는 **화면을 볼 수 없습니다.** 그래서 "마켓컬리에서 음료 �
                                  "from playwright.sync_api import sync_playwright"),
                 )
                 _submitted = st.form_submit_button(
-                    "▶ 이 코드 실행하기", type="primary", use_container_width=True)
+                    "▶ 이 코드 실행하기", type="primary",
+                    use_container_width=True, disabled=not _can_exec)
 
             _user_code = st.session_state.get("pw_user_code", "")
 
@@ -3405,7 +3439,7 @@ AI는 **화면을 볼 수 없습니다.** 그래서 "마켓컬리에서 음료 �
             st.caption("100개 약 10초 · 500개 약 35초")
 
             if st.button("🚀 마켓컬리에서 수집 시작", key="kurly_run_btn",
-                         use_container_width=True):
+                         use_container_width=True, disabled=not _can_exec):
                 import subprocess as _sp2, sys as _sys2, json as _json2, os as _os3
                 _script = _os3.path.join(
                     _os3.path.dirname(_os3.path.abspath(__file__)), "kurly_collect.py")
