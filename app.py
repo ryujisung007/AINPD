@@ -1545,6 +1545,7 @@ with st.sidebar:
         if _big_cursor:
             st.caption("이 앱 화면 안에서만 적용됩니다.")
 
+    st.caption("⚠️ 새로고침하면 입력한 내용이 사라집니다. 단계마다 제출해 두세요.")
     st.caption("한국식품정보원 AI 제품개발 교육")
     st.caption("© 2026 KFI")
 
@@ -3065,11 +3066,41 @@ AI는 **화면을 볼 수 없습니다.** 그래서 "마켓컬리에서 음료 �
             st.session_state["online_user_script"] = _pw_script
 
             st.markdown("---")
-            st.markdown("**Step 3. 완성된 스크립트 — ChatGPT에 붙여넣으세요**")
-            st.caption("📋 코드 블록 우측 상단 복사 아이콘 클릭 → ChatGPT에 붙여넣기")
+            st.markdown("**Step 3. 완성된 스크립트 — 복사해서 AI에게 주세요**")
+            st.caption("📋 코드 블록 우측 상단 복사 아이콘 클릭")
             st.code(_pw_script, language=None)
 
-            st.markdown("**Step 4. 체크리스트로 자가 점검하세요**")
+            st.markdown("**Step 4. 붙여넣을 곳 고르기**")
+            _way1, _way2 = st.columns(2)
+            with _way1:
+                st.markdown(
+                    "**🧠 ChatGPT / Gemini**\n\n"
+                    "파이썬 **코드**를 답으로 받습니다.\n\n"
+                    "받은 코드는 다음 탭에서 강사가 실제로 돌려 보여줍니다."
+                )
+            with _way2:
+                st.markdown(
+                    "**⚙️ Google AI Studio**\n\n"
+                    "코드가 아니라 **앱**을 만들어 줍니다.\n\n"
+                    "[aistudio.google.com/apps](https://aistudio.google.com/apps) "
+                    "→ **New app** → 스크립트 붙여넣기"
+                )
+            st.caption("구글 계정으로 로그인만 하면 되고, API 키를 따로 발급받지 않아도 됩니다.")
+
+            with st.expander("⚙️ Google AI Studio로 앱 만들어 보기"):
+                st.markdown(
+                    "1. [aistudio.google.com/apps](https://aistudio.google.com/apps) 접속 "
+                    "(구글 계정 로그인)\n"
+                    "2. **New app** 클릭\n"
+                    "3. 위에서 복사한 스크립트를 그대로 붙여넣고 실행\n"
+                    "4. 만들어진 앱을 눌러 결과를 확인\n\n"
+                    "**결과가 나오면 반드시 대조하세요** — 실제 마켓컬리 페이지를 열어 "
+                    "상품명과 가격이 같은지 몇 개만 확인합니다. "
+                    "다르면 AI가 지어낸 값입니다. 그때는 강사 시연 화면과 "
+                    "아래 **수집해둔 데이터**를 쓰세요."
+                )
+
+            st.markdown("**Step 5. 체크리스트로 자가 점검하세요**")
             _CHECKLIST = [
                 "수집 대상 사이트의 robots.txt를 직접 열어 확인했나요?",
                 "무엇을(항목) 어디서(검색어) 가져올지 구체적으로 지정했나요?",
@@ -3096,10 +3127,18 @@ AI는 **화면을 볼 수 없습니다.** 그래서 "마켓컬리에서 음료 �
                     "여기서는 **스크립트 작성까지** 진행하세요."
                 )
 
-            st.markdown("##### 🐍 받은 코드를 여기서 실행해보기")
-            st.info("① 앞 탭 요청문 복사 → ② ChatGPT에 붙여넣기 → "
-                    "③ **ChatGPT가 준 파이썬 코드**를 아래에 붙여넣고 실행")
-            st.caption("오류가 나도 괜찮습니다 — 오류 메시지를 ChatGPT에 다시 물어보며 고치는 것도 실습입니다.")
+            st.info(
+                "**이 탭에서 할 일** — ① 아래에서 **데이터를 받고** "
+                "→ ② 그 데이터로 **시장분석 스크립트**를 만들어 AI에게 넘깁니다.\n\n"
+                "코드를 직접 돌리는 과정은 **강사가 화면으로 시연**합니다."
+            )
+
+            st.markdown(
+                "##### 🔬 받은 코드 직접 실행하기 &nbsp;"
+                "<span style='font-size:12px;background:#fee2e2;color:#991b1b;"
+                "border-radius:6px;padding:2px 8px;font-weight:700;'>강사 시연용</span>",
+                unsafe_allow_html=True)
+            st.caption("오류가 나도 괜찮습니다 — 오류 메시지를 다시 물어보며 고치는 것까지가 실제 개발 방식입니다.")
             with st.expander("🔒 안전하게 실행되나요?"):
                 st.markdown(
                     "- 앱과 분리된 임시 폴더에서 별도 프로세스로 실행됩니다.\n"
@@ -3494,6 +3533,52 @@ AI는 **화면을 볼 수 없습니다.** 그래서 "마켓컬리에서 음료 �
                 _live.empty()
                 st.session_state["kurly_result"] = _res
 
+            # 설치가 안 된 환경(온라인 배포본 등)에서도 실습이 이어지도록
+            # 미리 수집해둔 실제 데이터를 불러올 수 있게 한다
+            import os as _os4
+            import json as _json4
+            _sdir = _os4.path.join(_os4.path.dirname(_os4.path.abspath(__file__)), "sample_data")
+            _sfiles = {}
+            if _os4.path.isdir(_sdir):
+                for _f in sorted(_os4.listdir(_sdir)):
+                    if _f.endswith(".json"):
+                        _sfiles[_f[len("kurly_"):-len(".json")].replace("_", "·")] = \
+                            _os4.path.join(_sdir, _f)
+
+            if _sfiles:
+                st.markdown("---")
+                st.markdown(
+                    "##### 📦 ① 데이터 받기 &nbsp;"
+                    "<span style='font-size:12px;background:#dcfce7;color:#166534;"
+                    "border-radius:6px;padding:2px 8px;font-weight:700;'>실습자</span>",
+                    unsafe_allow_html=True)
+                st.caption(
+                    "마켓컬리에서 실제로 수집해둔 데이터입니다. "
+                    "카테고리를 고르고 불러오면 아래에서 바로 분석까지 진행할 수 있습니다."
+                )
+                _sc1, _sc2 = st.columns([3, 1])
+                with _sc1:
+                    _spick = st.selectbox("카테고리", list(_sfiles.keys()),
+                                          key="kurly_sample_pick")
+                with _sc2:
+                    st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+                    _sload = st.button("📥 불러오기", key="kurly_sample_btn",
+                                       use_container_width=True)
+                if _sload:
+                    try:
+                        with open(_sfiles[_spick], encoding="utf-8") as _fh:
+                            _sd = _json4.load(_fh)
+                        st.session_state["kurly_result"] = {
+                            "ok": True,
+                            "keyword": _sd.get("category", _spick),
+                            "count": len(_sd.get("rows", [])),
+                            "rows": _sd.get("rows", []),
+                        }
+                        st.session_state["kurly_sample_note"] = "%s · %s 수집" % (
+                            _sd.get("sort", "판매량순"), _sd.get("collected", ""))
+                    except Exception as _e:                       # noqa: BLE001
+                        st.error("불러오기 실패: %s" % str(_e)[:200])
+
             _kres = st.session_state.get("kurly_result")
             if _kres and not _kres.get("ok"):
                 st.error("수집에 실패했습니다 — %s" % _kres.get("error", ""))
@@ -3503,10 +3588,11 @@ AI는 **화면을 볼 수 없습니다.** 그래서 "마켓컬리에서 음료 �
                 )
             elif _kres and _kres.get("ok"):
                 _rows = _kres.get("rows") or []
+                _note = st.session_state.get("kurly_sample_note")
                 st.success(
-                    "✅ **%d개 상품을 실제로 수집했습니다.** "
-                    "AI가 지어낸 값이 아니라 마켓컬리 화면에서 그대로 읽어온 데이터입니다."
-                    % len(_rows)
+                    "✅ **%d개 상품 데이터입니다.** "
+                    "AI가 지어낸 값이 아니라 마켓컬리 화면에서 그대로 읽어온 것입니다.%s"
+                    % (len(_rows), (" (%s)" % _note) if _note else "")
                 )
                 if len(_rows) < _run_n:
                     st.info(
@@ -3556,7 +3642,7 @@ AI는 **화면을 볼 수 없습니다.** 그래서 "마켓컬리에서 음료 �
                 )
 
                 st.markdown("---")
-                st.markdown("##### 🤖 수집한 데이터로 GPT에게 시장분석 시키기")
+                st.markdown("##### 🤖 ② 이 데이터로 GPT에게 시장분석 시키기")
                 st.caption(
                     "아래 스크립트에는 방금 수집한 실제 데이터가 그대로 들어 있습니다. "
                     "복사해서 ChatGPT에 붙여넣으면 **근거 있는 시장분석**이 나옵니다."
