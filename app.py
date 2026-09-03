@@ -494,6 +494,87 @@ def _playwright_ready() -> bool:
     return False
 
 
+_TEACHER_PKG_README = """AINPD 교육앱 - 강사PC 설치 안내
+
+[설치 순서]
+1. 이 폴더를 바탕화면 등 원하는 곳에 풀어 둡니다.
+2. setup_teacher_pc.bat 을 더블클릭합니다. (최초 1회, 5~10분)
+   - 파이썬 패키지와 크롤링용 브라우저를 내려받습니다.
+   - "파이썬이 없습니다" 가 나오면 python.org 에서 설치하고
+     설치 화면의 "Add Python to PATH" 를 반드시 체크하세요.
+3. 수업 때는 run_class.bat 을 실행합니다.
+   - 창을 닫으면 앱이 꺼집니다. 수업이 끝날 때까지 두세요.
+
+[실습자는 설치하지 않습니다]
+실습자는 웹앱 주소로 접속합니다.
+이 설치본은 강사가 크롤링을 직접 시연하기 위한 것입니다.
+
+[수업이 끝나면 - 공용PC라면 반드시]
+삭제하기.bat 을 더블클릭하면 앱을 끄고 이 폴더를 통째로 지웁니다.
+앱 안에서 지울 수도 있습니다 - 관리자 현황판 > 이 설치본 완전 삭제.
+.streamlit/secrets.toml 안에 접속코드가 들어 있으니 꼭 지우세요.
+"""
+
+
+@st.cache_data(show_spinner=False)
+def _build_teacher_package(with_codes: bool, with_api: bool) -> bytes:
+    """강사PC용 설치 ZIP을 메모리에서 만든다.
+
+    저장소가 비공개라 GitHub 다운로드 링크를 쓸 수 없어,
+    실행 중인 앱이 자기 파일을 묶어 준다.
+    """
+    import io as _io2
+    import os as _os2
+    import zipfile as _zf2
+
+    def _sec(k, d=""):
+        try:
+            return st.secrets.get(k, d) or d
+        except Exception:
+            return d
+
+    _base = _os2.path.dirname(_os2.path.abspath(__file__))
+    _buf = _io2.BytesIO()
+    with _zf2.ZipFile(_buf, "w", _zf2.ZIP_DEFLATED) as _z:
+        for _n in ("app.py", "kurly_collect.py", "requirements.txt",
+                   "setup_teacher_pc.bat", "run_class.bat", "삭제하기.bat"):
+            _p = _os2.path.join(_base, _n)
+            if _os2.path.isfile(_p):
+                _z.write(_p, _n)
+
+        for _folder in ("sample_data", "assets"):
+            _d = _os2.path.join(_base, _folder)
+            if not _os2.path.isdir(_d):
+                continue
+            for _root, _dirs, _files in _os2.walk(_d):
+                for _f in _files:
+                    _fp = _os2.path.join(_root, _f)
+                    _arc = _os2.path.relpath(_fp, _base).replace(_os2.sep, "/")
+                    _z.write(_fp, _arc)
+
+        # secrets.toml — 필요한 값만 골라 담는다
+        _lines = []
+        if with_codes:
+            _lines.append('ACCESS_CODE = "%s"' % _sec("ACCESS_CODE", "kfi2026"))
+            _adm = _sec("ADMIN_CODE")
+            if _adm:
+                _lines.append('ADMIN_CODE = "%s"' % _adm)
+        if with_api:
+            _key = _sec("ANTHROPIC_API_KEY")
+            if _key:
+                _lines.append('ANTHROPIC_API_KEY = "%s"' % _key)
+        if _lines:
+            _z.writestr(".streamlit/secrets.toml", "\n".join(_lines) + "\n")
+
+        _z.writestr("설치안내.txt", _TEACHER_PKG_README)
+
+        # 이 표식이 있는 폴더에서만 앱에 삭제 버튼이 뜬다.
+        # 개발용 원본 폴더·클라우드 배포본에는 없으므로 실수로 지울 수 없다.
+        _z.writestr(".installed_package", "AINPD teacher package\n")
+
+    return _buf.getvalue()
+
+
 @st.cache_data(ttl=60, show_spinner=False)
 def _get_hw_count(sheet_tab: str) -> int:
     """해당 탭의 제출 인원 수 반환 (1분 캐시)"""
@@ -6939,3 +7020,79 @@ padding:18px 22px;margin-bottom:14px;">
 
         except Exception as _de:
             st.error(f"현황 조회 오류: {_de}")
+
+        # ── 강사PC 설치 패키지 ──────────────────────────────
+        st.markdown("---")
+        with st.expander("🖥️ 강사PC 설치 패키지 내려받기", expanded=False):
+            st.caption(
+                "학원 공용PC에서 크롤링을 직접 시연할 때만 필요합니다. "
+                "실습자는 이 웹앱 주소로 들어오므로 설치하지 않습니다."
+            )
+            _pkg_c1, _pkg_c2 = st.columns(2)
+            with _pkg_c1:
+                _inc_codes = st.checkbox("접속코드·관리자코드 포함",
+                                         value=True, key="_pkg_codes")
+            with _pkg_c2:
+                _inc_api = st.checkbox("AI 기능 키까지 포함",
+                                       value=False, key="_pkg_api")
+            if _inc_api:
+                st.warning(
+                    "공용PC에 API 키 파일이 남습니다. "
+                    "크롤링 시연만 한다면 키 없이도 동작하니 빼는 편이 안전합니다."
+                )
+            try:
+                _pkg_bytes = _build_teacher_package(_inc_codes, _inc_api)
+                st.download_button(
+                    "📦 설치 패키지 내려받기 (ZIP)",
+                    data=_pkg_bytes,
+                    file_name="AINPD_강사PC.zip",
+                    mime="application/zip",
+                    use_container_width=True,
+                    key="_pkg_dl",
+                )
+                st.caption("압축 크기 약 %d KB" % (len(_pkg_bytes) // 1024))
+            except Exception as _pe:
+                st.error("패키지 생성 실패: %s" % str(_pe)[:200])
+
+            st.markdown(
+                "**설치 순서** — ① ZIP을 풀기 → "
+                "② `setup_teacher_pc.bat` 더블클릭 (최초 1회, 5~10분) → "
+                "③ 수업 때 `run_class.bat` 실행\n\n"
+                "**수업이 끝나면 `삭제하기.bat`** 을 더블클릭하면 통째로 지워집니다."
+            )
+
+        # ── 설치본에서만 보이는 삭제 버튼 ──────────────────
+        import os as _os5
+        _app_dir = _os5.path.dirname(_os5.path.abspath(__file__))
+        if _os5.path.isfile(_os5.path.join(_app_dir, ".installed_package")):
+            with st.expander("🧹 이 설치본 완전 삭제", expanded=False):
+                st.warning(
+                    "**이 PC에 설치된 교육앱 폴더를 통째로 지웁니다.** "
+                    "접속코드가 담긴 파일까지 함께 지워집니다. 되돌릴 수 없습니다."
+                )
+                st.caption(
+                    "지워지는 곳 — `%s`\n\n"
+                    "누르면 앱이 꺼지므로 이 화면은 연결이 끊깁니다. 정상입니다. "
+                    "내려받은 크롤링용 브라우저는 남습니다(다음 수업 설치 시간이 줄어듭니다)."
+                    % _app_dir
+                )
+                _sure = st.checkbox("지워도 됩니다. 확인했습니다.", key="_purge_sure")
+                if st.button("🧹 지금 삭제하기", key="_purge_btn",
+                             type="primary", disabled=not _sure,
+                             use_container_width=True):
+                    import subprocess as _sp5
+                    _bat = _os5.path.join(_app_dir, "삭제하기.bat")
+                    if not _os5.path.isfile(_bat):
+                        st.error("삭제하기.bat 을 찾을 수 없습니다. 폴더를 직접 삭제해 주세요.")
+                    else:
+                        try:
+                            # 앱 자신을 종료시키므로 결과를 기다리지 않는다
+                            _sp5.Popen(["cmd", "/c", "start", "", _bat, "/y"],
+                                       cwd=_os5.environ.get("TEMP", _app_dir),
+                                       shell=False)
+                            st.success(
+                                "삭제를 시작했습니다. 잠시 후 앱이 꺼지고 폴더가 사라집니다. "
+                                "이 창은 닫으셔도 됩니다."
+                            )
+                        except Exception as _xe:
+                            st.error("삭제 실행 실패: %s" % str(_xe)[:200])

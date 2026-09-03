@@ -14,11 +14,11 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
-echo [1/3] Python 확인 완료
+echo [1/4] Python 확인 완료
 python --version
 echo.
 
-echo [2/3] 필요한 패키지를 설치합니다. (2~3분)
+echo [2/4] 필요한 패키지를 설치합니다. (2~3분)
 python -m pip install --upgrade pip -q
 python -m pip install -r requirements.txt
 if errorlevel 1 (
@@ -29,7 +29,7 @@ if errorlevel 1 (
 echo     완료
 echo.
 
-echo [3/3] 크롤링용 브라우저를 내려받습니다. (5~10분, 약 200MB)
+echo [3/4] 크롤링용 브라우저를 내려받습니다. (5~10분, 약 200MB)
 python -m playwright install chromium
 if errorlevel 1 (
     echo [!] 브라우저 설치에 실패했습니다.
@@ -39,15 +39,30 @@ if errorlevel 1 (
 )
 echo.
 
+echo [4/4] 실습자가 접속할 수 있도록 방화벽을 엽니다. (8501 포트)
+netsh advfirewall firewall delete rule name="AINPD 교육앱" > nul 2>&1
+netsh advfirewall firewall add rule name="AINPD 교육앱" dir=in action=allow protocol=TCP localport=8501 > nul 2>&1
+if errorlevel 1 (
+    echo [!] 방화벽 규칙을 넣지 못했습니다. 관리자 권한이 없는 PC입니다.
+    echo     실습자가 접속되지 않으면 이 파일을 마우스 오른쪽 클릭 후
+    echo     "관리자 권한으로 실행" 으로 다시 한 번 돌려주세요.
+) else (
+    echo     완료
+)
+echo.
+
 if not exist ".streamlit\secrets.toml" (
     echo ============================================================
     echo [!] .streamlit\secrets.toml 파일이 없습니다.
-    echo     이 파일에는 접속코드와 API 키가 들어 있어 GitHub에 올라가지 않습니다.
-    echo     USB 등으로 가져와 .streamlit 폴더에 넣어주세요.
+    echo     접속 코드 기본값 kfi2026 으로 로그인됩니다.
+    echo     (웹앱 관리자 현황판에서 받은 설치 패키지에는 들어 있습니다)
     echo ============================================================
 ) else (
     echo [OK] secrets.toml 확인됨
 )
 echo.
-echo 준비가 끝났습니다. 수업 때는 run_class.bat 을 실행하세요.
+echo ------------------------------------------------------------
+echo   준비 완료. 수업 때는 run_class.bat 을 실행하세요.
+echo   수업이 끝나고 이 PC에서 지울 때는 삭제하기.bat 을 실행하세요.
+echo ------------------------------------------------------------
 pause
