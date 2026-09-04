@@ -1530,6 +1530,17 @@ if not st.session_state.get("authenticated"):
     except Exception:
         pass
 
+# 크롤링 실습 전용 화면 — 주소 뒤에 ?m=crawl 을 붙이면 로그인 없이 들어온다.
+# 강사 PC에 접속한 실습자가 이 실습만 하도록 떼어 놓은 모드.
+_CRAWL_ONLY = False
+try:
+    _CRAWL_ONLY = st.query_params.get("m") == "crawl"
+except Exception:
+    _CRAWL_ONLY = False
+if _CRAWL_ONLY:
+    st.session_state["authenticated"] = True
+    st.session_state.setdefault("student_name", "")
+
 if not st.session_state.get("authenticated"):
     st.markdown("""
     <div style="max-width:420px;margin:80px auto 0 auto;background:#ffffff;
@@ -1586,7 +1597,9 @@ if st.session_state.get("_big_cursor"):
 
 
 # 로그인 상태에서 세션당 1회 접속 기록
-if st.session_state.get("authenticated") and not st.session_state.get("_login_recorded"):
+if (st.session_state.get("authenticated")
+        and st.session_state.get("student_name")
+        and not st.session_state.get("_login_recorded")):
     _record_login(st.session_state["student_name"])
     st.session_state["_login_recorded"] = True
 
@@ -1595,6 +1608,15 @@ if st.session_state.get("authenticated") and not st.session_state.get("_login_re
 # 6. 사이드바
 # =========================================================
 
+if _CRAWL_ONLY:
+    # 목차 사이드바를 감춰 한 화면만 남긴다
+    st.markdown(
+        "<style>[data-testid='stSidebar'],[data-testid='stSidebarCollapsedControl']"
+        "{display:none !important;}</style>",
+        unsafe_allow_html=True,
+    )
+    section = "4️⃣ 시장분석 및 학습"
+
 with st.sidebar:
     st.markdown("## 🧪 AI 제품개발 실습")
     st.markdown("---")
@@ -1602,7 +1624,7 @@ with st.sidebar:
     if _sname:
         st.markdown(f"👤 **{_sname}**")
         st.markdown("---")
-    section = st.radio(
+    _section_pick = st.radio(
         "실습 목차",
         [
             "🏠 교육 개요",
@@ -1617,6 +1639,8 @@ with st.sidebar:
         ],
         label_visibility="collapsed"
     )
+    if not _CRAWL_ONLY:
+        section = _section_pick
     st.markdown("---")
     # 강사 모드에서만 — 화면 공유 시 마우스 위치가 잘 보이도록
     if st.session_state.get("_admin_verified"):
@@ -2928,26 +2952,49 @@ RTD 음료 마케터의 페르소나를 아래의 정보를 적용해서 작성�
 # 3. 제품 아이디어 도출
 # ----------------------------------------------------------
 elif section == "4️⃣ 시장분석 및 학습":
-    show_banner(
-        "시장분석 및 학습",
-        "온라인 시장 현황 분석부터 식품 전문 데이터 학습, 보고서 작성까지 AI와 함께 시장을 읽습니다.",
-        "4 / 7"
-    )
-    show_mission([
-        "온라인 쇼핑몰의 음료 판매 현황을 수집해 AI로 분석하기",
-        "식품안전나라 품목제조보고서 데이터를 AI에게 학습시키기",
-        "시장 조사 데이터를 기반으로 신제품 개발 보고서 작성하기",
-    ])
+    if _CRAWL_ONLY:
+        show_banner(
+            "온라인 시장분석 실습",
+            "쇼핑몰에서 실제 상품 데이터를 가져와 AI로 분석해 봅니다.",
+            "실습"
+        )
+        with st.expander("✏️ 이름 입력 (과제를 제출할 때만)"):
+            _cn = st.text_input("이름", key="_crawl_name",
+                                placeholder="예: 홍길동",
+                                label_visibility="collapsed")
+            if st.button("이름 저장", key="_crawl_name_btn"):
+                st.session_state["student_name"] = _cn.strip()
+                st.rerun()
+            if st.session_state.get("student_name"):
+                st.success("👤 %s — 이제 과제를 제출할 수 있습니다."
+                           % st.session_state["student_name"])
+    else:
+        show_banner(
+            "시장분석 및 학습",
+            "온라인 시장 현황 분석부터 식품 전문 데이터 학습, 보고서 작성까지 AI와 함께 시장을 읽습니다.",
+            "4 / 7"
+        )
+        show_mission([
+            "온라인 쇼핑몰의 음료 판매 현황을 수집해 AI로 분석하기",
+            "식품안전나라 품목제조보고서 데이터를 AI에게 학습시키기",
+            "시장 조사 데이터를 기반으로 신제품 개발 보고서 작성하기",
+        ])
 
     _S4_STEPS = ["온라인 시장분석", "식품전문정보 분석", "매대사진 분석", "보고서 작성", "AI 대화전환"]
 
-    tab_online, tab_food, tab_learn, tab_report, tab_ai = st.tabs([
-        "🛒 온라인 시장분석",
-        "🗂️ 식품전문정보분석",
-        "📊 시장조사 데이터 학습",
-        "📝 보고서 작성하기",
-        "🔄 AI 간 대화전환",
-    ])
+    if _CRAWL_ONLY:
+        # 이 화면에서는 온라인 시장분석 하나만 쓴다.
+        # 나머지 탭은 아래 st.stop() 으로 아예 실행되지 않는다.
+        (tab_online,) = st.tabs(["🛒 온라인 시장분석"])
+        tab_food = tab_learn = tab_report = tab_ai = None
+    else:
+        tab_online, tab_food, tab_learn, tab_report, tab_ai = st.tabs([
+            "🛒 온라인 시장분석",
+            "🗂️ 식품전문정보분석",
+            "📊 시장조사 데이터 학습",
+            "📝 보고서 작성하기",
+            "🔄 AI 간 대화전환",
+        ])
 
     # ── 탭 1: 온라인 시장분석 ──
     with tab_online:
@@ -3757,6 +3804,9 @@ AI는 **화면을 볼 수 없습니다.** 그래서 "마켓컬리에서 음료 �
                    ai_label="GPT 분석 결과",
                    title="과제 제출 — 수집 결과 + 시장분석")
 
+
+    if _CRAWL_ONLY:
+        st.stop()
 
     with tab_food:
         show_step_guide(
