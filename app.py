@@ -516,6 +516,50 @@ _TEACHER_PKG_README = """AINPD 교육앱 - 강사PC 설치 안내
 """
 
 
+_CLASS_LINK_TAB = "_수업접속"
+
+
+def _publish_class_link(url: str) -> bool:
+    """지금 수업의 접속 주소를 공용 시트에 게시한다."""
+    from datetime import datetime
+    try:
+        _gc = _get_gs_client()
+        _sh = _gc.open_by_key(_GS_SHEET_ID)
+        try:
+            _ws = _sh.worksheet(_CLASS_LINK_TAB)
+        except Exception:                                    # noqa: BLE001
+            _ws = _sh.add_worksheet(title=_CLASS_LINK_TAB, rows=10, cols=3)
+            _ws.update("A1:C1", [["주소", "게시시각", "게시자"]])
+        _ws.update("A2:C2", [[
+            url,
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            st.session_state.get("student_name", "강사"),
+        ]])
+        return True
+    except Exception:                                        # noqa: BLE001
+        return False
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _get_class_link():
+    """게시된 수업 주소를 읽는다. 12시간 지난 것은 무시한다."""
+    from datetime import datetime, timedelta
+    try:
+        _gc = _get_gs_client()
+        _sh = _gc.open_by_key(_GS_SHEET_ID)
+        _ws = _sh.worksheet(_CLASS_LINK_TAB)
+        _row = _ws.row_values(2)
+        if not _row or not _row[0].strip():
+            return None
+        _url = _row[0].strip()
+        _when = datetime.strptime(_row[1].strip(), "%Y-%m-%d %H:%M:%S")
+        if datetime.now() - _when > timedelta(hours=12):
+            return None                                      # 지난 수업 주소
+        return {"url": _url, "when": _row[1].strip()}
+    except Exception:                                        # noqa: BLE001
+        return None
+
+
 def _class_access_info() -> dict:
     """이 서버의 접속 주소·포트·방화벽 상태를 모은다.
 
@@ -524,7 +568,14 @@ def _class_access_info() -> dict:
     import socket
     import subprocess as _sp6
 
-    info = {"ips": [], "port": 8501, "firewall": None}
+    info = {"ips": [], "port": 8501, "firewall": None, "host": ""}
+
+    try:
+        _h = socket.gethostname().strip()
+        # 이름은 IP가 바뀌어도 그대로라 수업용 주소로 쓰기 좋다
+        info["host"] = _h if _h and "." not in _h else ""
+    except Exception:                                        # noqa: BLE001
+        pass
 
     try:
         info["port"] = int(st.get_option("server.port") or 8501)
@@ -1604,6 +1655,15 @@ if not st.session_state.get("authenticated"):
 
     _lc, _cc, _rc = st.columns([1, 1.4, 1])
     with _cc:
+        # 강사가 게시해 둔 수업 주소가 있으면, 로그인 없이 바로 갈 수 있게 띄운다
+        _live = _get_class_link()
+        if _live:
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+            st.link_button("▶ 실습 화면 열기", _live["url"],
+                           use_container_width=True, type="primary")
+            st.caption("실습만 하실 분은 위 버튼을 누르세요. 로그인이 필요 없습니다.")
+            st.markdown("---")
+
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
         with st.form("_login_form"):
             _code_in = st.text_input("접속 코드", type="password",
@@ -7148,6 +7208,38 @@ padding:18px 22px;margin-bottom:14px;">
                 st.code("http://%s:%d/?m=crawl" % (_ip, _ai["port"]), language=None)
                 st.caption("강사용 — 로그인 후 전체 화면")
                 st.code("http://%s:%d" % (_ip, _ai["port"]), language=None)
+
+            if _ai.get("host"):
+                st.markdown("**%s** — 컴퓨터 이름 주소" % _ai["host"])
+                st.caption("IP가 바뀌어도 이 주소는 그대로입니다 "
+                           "(강의실 망에서 이름이 풀리는지 한 번 확인해 보세요)")
+                st.code("http://%s:%d/?m=crawl" % (_ai["host"], _ai["port"]),
+                        language=None)
+
+            st.markdown("---")
+            st.markdown("**📢 실습자에게 이 주소 게시하기**")
+            st.caption(
+                "누르면 이 주소가 공용 시트에 기록되고, 실습자가 늘 쓰는 "
+                "고정 주소의 첫 화면에 **▶ 실습 화면 열기** 버튼으로 뜹니다. "
+                "실습자는 주소를 칠 필요 없이 클릭만 하면 됩니다. (12시간 뒤 자동 만료)"
+            )
+            _pub_ip = _ai["ips"][0] if _ai["ips"] else ""
+            _pub_choices = []
+            if _ai.get("host"):
+                _pub_choices.append("http://%s:%d/?m=crawl" % (_ai["host"], _ai["port"]))
+            if _pub_ip:
+                _pub_choices.append("http://%s:%d/?m=crawl" % (_pub_ip, _ai["port"]))
+            if _pub_choices:
+                _pub_url = st.radio("게시할 주소", _pub_choices, key="_pub_url_pick")
+                if st.button("📢 게시하기", key="_pub_btn", use_container_width=True):
+                    if _publish_class_link(_pub_url):
+                        _get_class_link.clear()
+                        st.success("게시했습니다. 실습자 첫 화면에 버튼이 뜹니다.")
+                    else:
+                        st.error("게시 실패 — 구글 시트 연결을 확인하세요.")
+                _cur = _get_class_link()
+                if _cur:
+                    st.caption("현재 게시된 주소: %s (%s)" % (_cur["url"], _cur["when"]))
 
             st.markdown("---")
             _fw = _ai["firewall"]
