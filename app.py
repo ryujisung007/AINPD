@@ -568,14 +568,7 @@ def _class_access_info() -> dict:
     import socket
     import subprocess as _sp6
 
-    info = {"ips": [], "port": 8501, "firewall": None, "host": ""}
-
-    try:
-        _h = socket.gethostname().strip()
-        # 이름은 IP가 바뀌어도 그대로라 수업용 주소로 쓰기 좋다
-        info["host"] = _h if _h and "." not in _h else ""
-    except Exception:                                        # noqa: BLE001
-        pass
+    info = {"ips": [], "port": 8501, "firewall": None}
 
     try:
         info["port"] = int(st.get_option("server.port") or 8501)
@@ -7209,13 +7202,6 @@ padding:18px 22px;margin-bottom:14px;">
                 st.caption("강사용 — 로그인 후 전체 화면")
                 st.code("http://%s:%d" % (_ip, _ai["port"]), language=None)
 
-            if _ai.get("host"):
-                st.markdown("**%s** — 컴퓨터 이름 주소" % _ai["host"])
-                st.caption("IP가 바뀌어도 이 주소는 그대로입니다 "
-                           "(강의실 망에서 이름이 풀리는지 한 번 확인해 보세요)")
-                st.code("http://%s:%d/?m=crawl" % (_ai["host"], _ai["port"]),
-                        language=None)
-
             st.markdown("---")
             st.markdown("**📢 실습자에게 이 주소 게시하기**")
             st.caption(
@@ -7223,14 +7209,14 @@ padding:18px 22px;margin-bottom:14px;">
                 "고정 주소의 첫 화면에 **▶ 실습 화면 열기** 버튼으로 뜹니다. "
                 "실습자는 주소를 칠 필요 없이 클릭만 하면 됩니다. (12시간 뒤 자동 만료)"
             )
-            _pub_ip = _ai["ips"][0] if _ai["ips"] else ""
-            _pub_choices = []
-            if _ai.get("host"):
-                _pub_choices.append("http://%s:%d/?m=crawl" % (_ai["host"], _ai["port"]))
-            if _pub_ip:
-                _pub_choices.append("http://%s:%d/?m=crawl" % (_pub_ip, _ai["port"]))
+            _pub_choices = ["http://%s:%d/?m=crawl" % (_ip, _ai["port"])
+                            for _ip in _ai["ips"]]
             if _pub_choices:
-                _pub_url = st.radio("게시할 주소", _pub_choices, key="_pub_url_pick")
+                if len(_pub_choices) == 1:
+                    _pub_url = _pub_choices[0]
+                    st.code(_pub_url, language=None)
+                else:
+                    _pub_url = st.radio("게시할 주소", _pub_choices, key="_pub_url_pick")
                 if st.button("📢 게시하기", key="_pub_btn", use_container_width=True):
                     if _publish_class_link(_pub_url):
                         _get_class_link.clear()
