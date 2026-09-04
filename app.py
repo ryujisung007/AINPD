@@ -516,6 +516,55 @@ _TEACHER_PKG_README = """AINPD 교육앱 - 강사PC 설치 안내
 """
 
 
+def _class_access_info() -> dict:
+    """이 서버의 접속 주소·포트·방화벽 상태를 모은다.
+
+    169.254.x.x(주소 할당 실패값)와 루프백은 실습자가 쓸 수 없으므로 뺀다.
+    """
+    import socket
+    import subprocess as _sp6
+
+    info = {"ips": [], "port": 8501, "firewall": None}
+
+    try:
+        info["port"] = int(st.get_option("server.port") or 8501)
+    except Exception:                                        # noqa: BLE001
+        pass
+
+    ips = []
+    try:
+        for _e in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ip = _e[4][0]
+            if ip.startswith("169.254.") or ip.startswith("127."):
+                continue
+            if ip not in ips:
+                ips.append(ip)
+    except Exception:                                        # noqa: BLE001
+        pass
+    if not ips:
+        # 호스트명으로 안 잡히는 환경 대비 — 외부로 향하는 소켓의 로컬 주소를 본다
+        try:
+            _s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            _s.connect(("8.8.8.8", 80))
+            ips = [_s.getsockname()[0]]
+            _s.close()
+        except Exception:                                    # noqa: BLE001
+            pass
+    info["ips"] = ips
+
+    try:
+        _r = _sp6.run(
+            ["netsh", "advfirewall", "firewall", "show", "rule", "name=AINPD 교육앱"],
+            capture_output=True, text=True, encoding="cp949", errors="replace",
+            timeout=8,
+        )
+        info["firewall"] = (_r.returncode == 0 and "8501" in (_r.stdout or ""))
+    except Exception:                                        # noqa: BLE001
+        info["firewall"] = None                              # 확인 불가(비윈도우 등)
+
+    return info
+
+
 @st.cache_data(show_spinner=False)
 def _build_teacher_package(with_codes: bool, with_api: bool) -> bytes:
     """강사PC용 설치 ZIP을 메모리에서 만든다.
@@ -7083,6 +7132,39 @@ padding:18px 22px;margin-bottom:14px;">
 
         except Exception as _de:
             st.error(f"현황 조회 오류: {_de}")
+
+        # ── 실습자 접속 주소 ────────────────────────────────
+        st.markdown("---")
+        with st.expander("📡 실습자 접속 주소 보기", expanded=False):
+            _ai = _class_access_info()
+            if not _ai["ips"]:
+                st.error(
+                    "이 PC의 네트워크 주소를 찾지 못했습니다. "
+                    "유선랜이 연결돼 있는지 확인하세요."
+                )
+            for _ip in _ai["ips"]:
+                st.markdown("**%s**" % _ip)
+                st.caption("실습자용 — 로그인 없이 크롤링 실습 화면만 열립니다")
+                st.code("http://%s:%d/?m=crawl" % (_ip, _ai["port"]), language=None)
+                st.caption("강사용 — 로그인 후 전체 화면")
+                st.code("http://%s:%d" % (_ip, _ai["port"]), language=None)
+
+            st.markdown("---")
+            _fw = _ai["firewall"]
+            if _fw is True:
+                st.success("✅ 방화벽 8501 포트가 열려 있습니다.")
+            elif _fw is False:
+                st.warning(
+                    "⚠️ 방화벽 규칙이 없습니다. 실습자가 접속되지 않으면 "
+                    "`setup_teacher_pc.bat` 을 **관리자 권한으로 실행**하세요."
+                )
+            else:
+                st.caption("방화벽 상태는 확인하지 못했습니다.")
+
+            st.caption(
+                "현재 서비스 포트 **%d** · 실습자는 강사 PC와 같은 네트워크에 있어야 합니다."
+                % _ai["port"]
+            )
 
         # ── 강사PC 설치 패키지 ──────────────────────────────
         st.markdown("---")
