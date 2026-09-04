@@ -1631,18 +1631,31 @@ with st.sidebar:
     st.caption("© 2026 KFI")
 
     # 강사 전용 — 구글 시트 탭 일괄 초기화
-    with st.expander("🔧 관리"):
+    # 진입 직후 rerun에서 expander가 닫히면 결과가 안 보이므로, 그때는 펼쳐둔다
+    _adm_open = bool(st.session_state.get("_admin_verified")
+                     or st.session_state.get("_admin_msg"))
+    with st.expander("🔧 관리", expanded=_adm_open):
         if not st.session_state.get("_admin_verified"):
+            if st.session_state.get("_admin_msg"):
+                st.error(st.session_state.pop("_admin_msg"))
             _admin_pw = st.text_input("관리자 코드", type="password", key="_admin_pw_input",
                                       placeholder="강사 전용 코드 입력")
             if st.button("관리자 모드 진입", key="_admin_verify_btn", use_container_width=True):
                 if _ADMIN_CODE and _admin_pw == _ADMIN_CODE:
                     st.session_state["_admin_verified"] = True
                     st.rerun()
+                elif not _ADMIN_CODE:
+                    st.session_state["_admin_msg"] = (
+                        "이 서버에는 관리자 코드가 설정되어 있지 않습니다. "
+                        "secrets.toml의 ADMIN_CODE를 확인하세요."
+                    )
+                    st.rerun()
                 else:
-                    st.error("관리자 코드가 올바르지 않습니다.")
+                    st.session_state["_admin_msg"] = "관리자 코드가 올바르지 않습니다."
+                    st.rerun()
         else:
-            st.caption("🔓 관리자 모드 활성화")
+            st.success("🔓 관리자 모드 활성화됨")
+            st.caption("🔐 관리자 현황판에서 설치 패키지를 내려받을 수 있습니다.")
             if st.button("🚪 관리자 모드 종료", key="_admin_exit_btn", use_container_width=True):
                 st.session_state["_admin_verified"] = False
                 st.rerun()
