@@ -2046,6 +2046,9 @@ if section == "🏠 교육 개요":
         ],
         "📝 실습 양식": [
             ("음료개발 데이터베이스", "https://docs.google.com/spreadsheets/d/1hq-yxoyaxUXWdxJnLeDqGlLXRpeIwzhR/edit?usp=drive_link", True),
+            # 제출물이 쌓이는 시트 — 앱이 쓰는 시트와 어긋나지 않게 ID를 재사용한다
+            ("과제 제출 시트",
+             f"https://docs.google.com/spreadsheets/d/{_GS_SHEET_ID}/edit?usp=sharing", False),
         ],
     }
 
