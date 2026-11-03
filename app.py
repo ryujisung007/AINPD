@@ -433,7 +433,8 @@ _ALL_HW_TABS = [
     "연구원_페르소나",   # 2️⃣ 제품개발 페르소나 > 연구원 탭
     "마케터_페르소나",   # 2️⃣ 제품개발 페르소나 > 마케터 탭
     "데이터수집스크립트",# 3️⃣ 제품개발용 데이터 > 데이터 수집 스크립트 탭
-    "데이터학습지시",    # 3️⃣ 제품개발용 데이터 > AI 데이터 학습시키기 탭
+    "데이터학습지시",    # 3️⃣ 제품개발용 데이터 > 지식베이스(라이브러리) 등록하기 탭
+    "앱만들기연습",      # 4️⃣ 시장분석 및 학습 > AI 스튜디오 앱 만들기 탭
     "온라인시장분석",    # 4️⃣ 시장분석 및 학습 > 온라인 시장분석 탭
     "식품전문정보분석",  # 4️⃣ 시장분석 및 학습 > 식품전문정보분석 탭
     "시장조사학습",      # 4️⃣ 시장분석 및 학습 > 시장조사 데이터 학습 탭
@@ -879,6 +880,7 @@ _HW_VIEW_TABS = [
     ("2️⃣ 마케터 페르소나",      "마케터_페르소나"),
     ("3️⃣ 데이터 수집 스크립트", "데이터수집스크립트"),
     ("3️⃣ 데이터 학습지시",      "데이터학습지시"),
+    ("4️⃣ AI 스튜디오 앱 만들기", "앱만들기연습"),
     ("4️⃣ 온라인 시장분석",      "온라인시장분석"),
     ("4️⃣ 수집 코드 실행",       "수집코드실행"),
     ("4️⃣ 식품전문정보분석",     "식품전문정보분석"),
@@ -928,6 +930,14 @@ def _fetch_all_submissions():
                 "script": row[2].strip(), "answer": answer,
                 "link": row[4].strip(), "extra": row[5].strip(),
             })
+    # 배합비 작성은 캡처로 제출하므로, 같은 학생의 배합표 캡처를 붙인다
+    try:
+        _caps = {c["name"]: c["b64"] for c in _fetch_captures(_BEV_CAP_TAB)}
+        for it in items:
+            if it["tab"] == "배합비" and it["name"] in _caps:
+                it["img"] = _caps[it["name"]]
+    except Exception:
+        pass
     items.sort(key=lambda x: x["time"])
     return items
 
@@ -1028,7 +1038,11 @@ def _build_submissions_pptx(title: str, items: list) -> bytes:
 
         body = it["answer"] or it["script"] or "(내용 없음)"
         body_lbl = "제출답안" if it["answer"] else "작성 스크립트"
-        img = _download_drive_thumb(it["link"]) if it["link"] else None
+        if it.get("img"):
+            import base64
+            img = base64.b64decode(it["img"])
+        else:
+            img = _download_drive_thumb(it["link"]) if it["link"] else None
         bw = 7.2 if img else 12.3
         size = 22 if len(body) <= 150 else 18 if len(body) <= 300 else 15
         _text(s, 0.5, 1.4, bw, 0.4, body_lbl, 13, "E07A1F", True)
@@ -1060,13 +1074,18 @@ def _submission_slide_html(it: dict, pos: str) -> str:
     import html as _h
     e = lambda t: _h.escape(t or "")
     body = it["answer"] or it["script"] or "(내용 없음)"
-    body_lbl = "제출답안" if it["answer"] else "작성 스크립트"
+    body_lbl = it.get("body_lbl") or ("제출답안" if it["answer"] else "작성 스크립트")
     fsize = 26 if len(body) <= 150 else 21 if len(body) <= 300 else 17
     new = ("<span style='background:#C2413B;color:#fff;border-radius:99px;padding:3px 12px;"
            "font-size:15px;font-weight:800;margin-left:12px;'>NEW</span>") if _is_recent(it["time"]) else ""
     thumb = _drive_thumb_url(it["link"])
     media = ""
-    if thumb:
+    if it.get("img"):
+        # 사전준비 캡처 — 시트에 저장한 이미지를 그대로 보여 준다
+        media = ("<div style='flex:0 0 58%;position:relative;min-height:0;'>"
+                 "<img src='data:image/jpeg;base64," + it["img"] + "' style='position:absolute;inset:0;"
+                 "width:100%;height:100%;object-fit:contain;'></div>")
+    elif thumb:
         media = (
             "<div style='flex:0 0 40%;display:flex;flex-direction:column;gap:8px;'>"
             "<div style='flex:1;border-radius:12px;background:#EAF4F1 url(\"" + thumb + "\") "
@@ -1107,6 +1126,9 @@ def _submission_card_html(it: dict) -> str:
     thumb = _drive_thumb_url(it["link"], 500)
     img = ("<div style='height:120px;margin-top:10px;border-radius:8px;background:#EAF4F1 url(\""
            + thumb + "\") center/contain no-repeat;'></div>") if thumb else ""
+    if it.get("img"):
+        img = ("<img src='data:image/jpeg;base64," + it["img"] + "' style='width:100%;margin-top:10px;"
+               "border-radius:8px;border:1px solid #e2e8f0;'>")
     border = "#C2413B" if _is_recent(it["time"]) else "#e2e8f0"
     return (
         "<div style='background:#fff;border:2px solid " + border + ";border-radius:12px;"
@@ -1121,6 +1143,15 @@ def _submission_card_html(it: dict) -> str:
 
 
 _LATEST_FEED = "⏱ 방금 들어온 제출 (전체 과제)"
+_PREP_VIEW = "🏠 사전준비 인증 (캡처)"
+
+
+def _prep_items() -> list:
+    """사전준비확인 탭(캡처 이미지)을 제출물 보기 항목 모양으로 바꾼다"""
+    return [{"tab": _PREP_TAB, "label": "🏠 교육 개요 · 사전준비 인증", "time": p["time"],
+             "name": p["name"], "script": "", "answer": p["memo"] or "(메모 없음)",
+             "body_lbl": "메모", "link": "", "extra": "", "img": p["b64"]}
+            for p in sorted(_fetch_captures(_PREP_TAB), key=lambda x: x["time"])]
 
 
 def _render_submission_viewer():
@@ -1130,7 +1161,7 @@ def _render_submission_viewer():
 
     _c1, _c2, _c3 = st.columns([2.2, 1.3, 1])
     with _c1:
-        _sel = st.selectbox("과제", [_LATEST_FEED] + [l for l, _ in _HW_VIEW_TABS], key="_pv_task")
+        _sel = st.selectbox("과제", [_LATEST_FEED, _PREP_VIEW] + [l for l, _ in _HW_VIEW_TABS], key="_pv_task")
     with _c2:
         _mode = st.radio("보기", ["한 장씩", "모아보기"], horizontal=True, key="_pv_mode")
     with _c3:
@@ -1138,6 +1169,11 @@ def _render_submission_viewer():
                           help="30초마다 시트를 다시 읽습니다.")
     st.caption("💡 크게 보려면 사이드바를 접고 F11(전체 화면)을 누르세요. "
                "드라이브 링크 미리보기는 '링크가 있는 모든 사용자' 공유 파일만 보입니다.")
+
+    def _load():
+        if _sel == _PREP_VIEW:
+            return _prep_items()
+        return _pick(_fetch_all_submissions())
 
     def _pick(all_items):
         if _sel == _LATEST_FEED:
@@ -1148,7 +1184,7 @@ def _render_submission_viewer():
     @st.fragment(run_every="30s" if _auto else None)
     def _live():
         try:
-            _items = _pick(_fetch_all_submissions())
+            _items = _load()
         except Exception as _fe:
             st.error("제출물 조회 오류: %s" % str(_fe)[:200])
             return
@@ -1204,7 +1240,8 @@ def _render_submission_viewer():
             try:
                 with st.spinner("슬라이드 만드는 중... (드라이브 미리보기 이미지를 받는 데 시간이 걸릴 수 있습니다)"):
                     _fetch_all_submissions.clear()
-                    _snap = _pick(_fetch_all_submissions())
+                    _fetch_captures.clear()
+                    _snap = _load()
                     if _sel == _LATEST_FEED:
                         _snap = list(reversed(_snap))
                     st.session_state["_pv_ppt"] = (_sel, _build_submissions_pptx(
@@ -1269,6 +1306,106 @@ def _record_login(student: str):
                 pass
     except Exception:
         pass
+
+
+# ── 사전준비 인증 (프로젝트 소스 캡처) ─────────────────────────
+# 시트 칸에는 이미지를 넣을 수 없고 한 칸에 5만 자까지만 들어간다.
+# 그래서 캡처를 작은 JPEG로 줄여 base64 글자로 바꾼 뒤 여러 칸에 나눠 저장한다.
+# (서비스 계정은 자체 드라이브 저장 용량이 없어 드라이브 업로드는 쓰지 않는다)
+_PREP_TAB = "사전준비확인"
+_BEV_CAP_TAB = "배합비_캡처"   # 배합비 작성 Step 3 — 내려받은 배합표 캡처
+_PREP_CHUNK = 45000      # 한 칸에 넣을 글자 수 (시트 한도 50,000자)
+_PREP_MAX_CHUNKS = 6     # 이미지 한 장에 쓸 최대 칸 수
+
+
+def _prep_image_b64(img) -> str:
+    """캡처 이미지를 시트에 넣을 수 있는 크기의 JPEG base64 문자열로 줄인다"""
+    import io
+    import base64
+    im = img.convert("RGB")
+    b64 = ""
+    for width, quality in [(1000, 70), (900, 60), (800, 50), (700, 45), (600, 40)]:
+        im2 = im
+        if im2.width > width:
+            im2 = im2.resize((width, int(im2.height * width / im2.width)))
+        buf = io.BytesIO()
+        im2.save(buf, "JPEG", quality=quality, optimize=True)
+        b64 = base64.b64encode(buf.getvalue()).decode()
+        if len(b64) <= _PREP_CHUNK * _PREP_MAX_CHUNKS:
+            break
+    return b64
+
+
+def _submit_capture(tab: str, student: str, memo: str, b64: str):
+    """캡처 이미지를 시트 탭에 저장 (같은 학생은 최신 제출로 덮어쓰기)"""
+    from datetime import datetime, timezone, timedelta
+    import gspread.utils
+    chunks = [b64[i:i + _PREP_CHUNK] for i in range(0, len(b64), _PREP_CHUNK)]
+    if len(chunks) > _PREP_MAX_CHUNKS:
+        return False, "캡처가 너무 큽니다. 필요한 부분만 잘라서 다시 캡처해 주세요."
+    try:
+        sh = _get_gs_client().open_by_key(_GS_SHEET_ID)
+        ncols = 4 + _PREP_MAX_CHUNKS
+        try:
+            ws = sh.worksheet(tab)
+        except Exception:
+            ws = sh.add_worksheet(title=tab, rows=200, cols=ncols)
+            ws.append_row(["제출시간", "학생이름", "메모", "이미지 칸 수"]
+                          + ["이미지%d" % (i + 1) for i in range(_PREP_MAX_CHUNKS)])
+        ts = (datetime.now(timezone.utc) + timedelta(hours=9)).strftime("%Y-%m-%d %H:%M")
+        row = ([ts, student, memo.strip(), str(len(chunks))] + chunks
+               + [""] * (_PREP_MAX_CHUNKS - len(chunks)))
+        names = ws.col_values(2)
+        if student in names[1:]:
+            r = names.index(student) + 1
+            end = gspread.utils.rowcol_to_a1(r, ncols)
+            ws.update([row], "A%d:%s" % (r, end))   # RAW 입력 — base64가 수식으로 읽히지 않게
+        else:
+            ws.append_row(row)
+        return True, ""
+    except Exception as e:
+        return False, str(e)[:200]
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _fetch_captures(tab: str):
+    """캡처 목록 읽기 — 관리자 현황판·제출물 보기용 (1분 캐시)"""
+    sh = _get_gs_client().open_by_key(_GS_SHEET_ID)
+    try:
+        rows = sh.worksheet(tab).get_all_values()[1:]
+    except Exception:
+        return []
+    out = []
+    for r in rows:
+        r = list(r) + [""] * (4 + _PREP_MAX_CHUNKS - len(r))
+        if not r[1].strip():
+            continue
+        n = int(r[3]) if r[3].isdigit() else 0
+        out.append({"time": r[0], "name": r[1], "memo": r[2], "b64": "".join(r[4:4 + n])})
+    return out
+
+
+def _capture_input(key: str):
+    """캡처 받기 — '📋 캡처 붙여넣기' 버튼 또는 파일 올리기. 미리보기까지 보여 주고 PIL 이미지를 돌려준다"""
+    img = None
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        try:
+            from streamlit_paste_button import paste_image_button
+            pasted = paste_image_button("📋 캡처 붙여넣기", key=key + "_paste")
+            if pasted is not None and pasted.image_data is not None:
+                img = pasted.image_data
+        except ImportError:
+            st.caption("붙여넣기 버튼을 쓸 수 없는 환경입니다. 오른쪽에 파일을 올려 주세요.")
+    with c2:
+        f = st.file_uploader("또는 캡처 파일 올리기", type=["png", "jpg", "jpeg", "webp"],
+                             key=key + "_file", label_visibility="collapsed")
+        if f is not None:
+            from PIL import Image
+            img = Image.open(f)
+    if img is not None:
+        st.image(img, caption="제출할 캡처", width=520)
+    return img
 
 
 def _submit_report_nb(student: str, nb_script: str):
@@ -2192,6 +2329,7 @@ with st.sidebar:
                             ("2️⃣ 마케터 페르소나",      "마케터_페르소나"),
                             ("3️⃣ 데이터 수집 스크립트", "데이터수집스크립트"),
                             ("3️⃣ 데이터 학습지시",      "데이터학습지시"),
+                            ("4️⃣ AI 스튜디오 앱 만들기", "앱만들기연습"),
                             ("4️⃣ 온라인 시장분석",      "온라인시장분석"),
                             ("4️⃣ 식품전문정보분석",     "식품전문정보분석"),
                             ("4️⃣ 시장조사 학습",        "시장조사학습"),
@@ -2447,6 +2585,31 @@ if section == "🏠 교육 개요":
         btns = "".join(_dl_btn(n, fid, hl) for n, fid, hl in files)
         st.markdown(f'<div style="display:flex;flex-wrap:wrap;margin-bottom:8px;">{btns}</div>',
                     unsafe_allow_html=True)
+
+    # ── 사전준비 완료 인증 — ChatGPT 프로젝트 '소스' 화면 캡처 제출 ──
+    st.markdown("---")
+    st.markdown("### ✅ 사전준비 완료 인증 (교육생)")
+    st.caption("ChatGPT 프로젝트의 **'소스'** 화면을 캡처해 제출하세요. 강사가 관리자 현황판에서 확인합니다.")
+    show_example("""1. ChatGPT 프로젝트 열기 → 위쪽 '소스' 탭
+2. 위 노란색 필수 자료가 소스 목록에 올라가 있는지 확인
+3. 화면 캡처 — Windows: Win + Shift + S  /  Mac: Cmd + Ctrl + Shift + 4
+4. 아래 '📋 캡처 붙여넣기' 버튼 누르기 (또는 캡처 파일을 끌어다 놓기) → 제출""")
+
+    _prep_student = st.session_state.get("student_name", "")
+    _prep_img = _capture_input("prep")
+    _prep_memo = st.text_input("메모 (선택)", key="prep_memo",
+                               placeholder="예: 필수 자료 5개 모두 올림 / 1개는 용량 문제로 못 올림")
+    if not _prep_student:
+        st.warning("제출하려면 먼저 로그인하세요.")
+    if st.button("📤 사전준비 인증 제출", key="prep_submit_btn", type="primary",
+                 disabled=_prep_img is None or not _prep_student):
+        with st.spinner("캡처를 저장하는 중..."):
+            _ok, _err = _submit_capture(_PREP_TAB, _prep_student, _prep_memo, _prep_image_b64(_prep_img))
+        if _ok:
+            _fetch_captures.clear()
+            st.success("✅ %s 님 사전준비 인증 완료! (다시 제출하면 최신 캡처로 바뀝니다)" % _prep_student)
+        else:
+            st.error("제출 실패: %s" % _err)
 
     st.markdown("---")
     st.markdown("### 📤 공유 링크 만들기 가이드")
@@ -3082,6 +3245,8 @@ RTD 음료 마케터의 페르소나를 아래의 정보를 적용해서 작성�
         st.caption("🔒 그 외 직군(건강기능식품·소스/조미료·면류·축산가공)은 이번 교육에서 선택할 수 없습니다 — 필요하면 아래 직접 입력란에 적으세요.")
         r_theme_manual = st.text_input("직접 입력 (다른 직무)", placeholder="예: 냉동식품 연구원, 떡류 전문 연구원", key="r_theme_manual", label_visibility="collapsed")
         r_theme_sel = r_theme or _r_default_key
+        # 위젯 값은 다른 섹션으로 가면 지워지므로 별도 키에 보관 → STEP 3 분야 기본값으로 사용
+        st.session_state["_my_field"] = r_theme_sel
         rp = RESEARCHER_PRESETS[r_theme_sel]
         rtk = r_theme_sel.replace(" ", "_").replace("·", "").replace(".", "")
         r_job_display = r_theme_manual.strip() or (r_theme_sel.split(" ", 1)[-1] if " " in r_theme_sel else r_theme_sel)
@@ -3525,20 +3690,22 @@ elif section == "4️⃣ 시장분석 및 학습":
             "4 / 7"
         )
         show_mission([
+            "구글 AI 스튜디오로 간단한 앱을 만들어 보며 'AI로 앱 만들기' 감 잡기",
             "온라인 쇼핑몰의 음료 판매 현황을 수집해 AI로 분석하기",
             "식품안전나라 품목제조보고서 데이터를 AI에게 학습시키기",
             "시장 조사 데이터를 기반으로 신제품 개발 보고서 작성하기",
         ])
 
-    _S4_STEPS = ["온라인 시장분석", "식품전문정보 분석", "매대사진 분석", "보고서 작성", "AI 대화전환"]
+    _S4_STEPS = ["앱 만들기 연습", "온라인 시장분석", "식품전문정보 분석", "매대사진 분석", "보고서 작성", "AI 대화전환"]
 
     if _CRAWL_ONLY:
         # 이 화면에서는 온라인 시장분석 하나만 쓴다.
         # 나머지 탭은 아래 st.stop() 으로 아예 실행되지 않는다.
         (tab_online,) = st.tabs(["🛒 온라인 시장분석"])
-        tab_food = tab_learn = tab_report = tab_ai = None
+        tab_app = tab_food = tab_learn = tab_report = tab_ai = None
     else:
-        tab_online, tab_food, tab_learn, tab_report, tab_ai = st.tabs([
+        tab_app, tab_online, tab_food, tab_learn, tab_report, tab_ai = st.tabs([
+            "🛠️ AI 스튜디오 앱 만들기",
             "🛒 온라인 시장분석",
             "🗂️ 식품전문정보분석",
             "📊 시장조사 데이터 학습",
@@ -3549,7 +3716,7 @@ elif section == "4️⃣ 시장분석 및 학습":
     # ── 탭 1: 온라인 시장분석 ──
     with tab_online:
         show_step_guide(
-            _S4_STEPS, 0,
+            _S4_STEPS, 1,
             todo="쇼핑몰에서 상품 데이터를 가져오는 코드를 AI에게 만들게 하고, 직접 실행해 봅니다.",
             uses="STEP 2에서 만든 페르소나 + STEP 3에서 학습시킨 AI 프로젝트",
             produces="실제로 수집한 상품 데이터 — 다음 단계 분석의 재료",
@@ -4358,9 +4525,97 @@ AI는 **화면을 볼 수 없습니다.** 그래서 "마켓컬리에서 음료 �
     if _CRAWL_ONLY:
         st.stop()
 
+    # ── 탭 0: AI 스튜디오 앱 만들기 연습 (온라인 시장분석 전 워밍업) ──
+    with tab_app:
+        show_step_guide(
+            _S4_STEPS, 0,
+            todo="구글 AI 스튜디오에서 내 취향과 MBTI를 담은 '나만의 음료 만들기' 앱을 만들고, 고쳐 달라고 요청해 봅니다. (연습)",
+            uses="내가 좋아하는 맛·색·느낌과 MBTI",
+            produces="내 취향이 담긴 음료 컨셉 앱 — 컨셉을 말로 설명해 AI에게 맡기는 감각",
+            minutes=15,
+        )
+        st.markdown("#### 🛠️ 구글 AI 스튜디오로 '나만의 음료 만들기' 앱 만들기")
+        st.info(
+            "**말로 설명하면 AI가 화면까지 갖춘 앱을 만들어 줍니다.** 코딩을 몰라도 됩니다. "
+            "예시로 감을 잡은 뒤, **내 취향과 MBTI를 섞은 나만의 음료 앱**을 만들어 봅니다."
+        )
+
+        st.markdown("##### STEP 1. AI 스튜디오 열기")
+        show_example("""1. aistudio.google.com 접속 → 구글 계정으로 로그인
+2. 왼쪽 메뉴에서 'Build'(앱 만들기) 선택
+3. 가운데 입력창에 만들고 싶은 앱을 한두 문장으로 설명하고 실행""")
+
+        st.markdown("##### STEP 2. 예시로 감 잡기")
+        st.caption("아래를 그대로 붙여넣어 보세요. 몇 분 뒤 오른쪽 'Preview'에 앱이 나타납니다.")
+        st.code("올해 현재까지의 각 음악 어플의 순위를 수집해서 인기곡과 가수를 알 수 있는 앱을 만들자",
+                language=None)
+
+        st.markdown("##### STEP 3. 나만의 음료 컨셉 고르기 ★ 실습")
+        st.caption("하나씩 골라 보세요. 고르는 대로 아래 앱 설명이 바뀝니다. 목록에 없으면 직접 입력하세요.")
+
+        def _app_pick(label, opts, key, default):
+            st.caption(label)
+            v = st.pills(label, opts, default=default, key=key, label_visibility="collapsed")
+            t = st.text_input(label + " 직접 입력", key=key + "_txt",
+                              placeholder="직접 입력", label_visibility="collapsed")
+            return t.strip() or v or default
+
+        _ac1, _ac2 = st.columns(2)
+        with _ac1:
+            _a_type = _app_pick("🥤 음료 유형", ["탄산음료", "에너지·기능성", "차·커피", "과일·스무디",
+                                                "우유·요거트", "제로슈거"], "app_type", "탄산음료")
+            _a_taste = _app_pick("😋 좋아하는 맛", ["상큼한 시트러스", "달콤한 베리", "청량한 민트·라임",
+                                                  "고소한 곡물·견과", "쌉쌀한 커피·차", "열대과일"],
+                                 "app_taste", "상큼한 시트러스")
+            _a_color = _app_pick("🎨 좋아하는 색", ["파스텔 핑크", "비비드 오렌지", "민트 그린",
+                                                  "투명·클리어", "딥 퍼플", "블랙 & 골드"],
+                                 "app_color", "파스텔 핑크")
+        with _ac2:
+            _a_mood = _app_pick("✨ 원하는 느낌", ["설레는", "차분한", "에너지 넘치는", "힐링되는",
+                                                 "고급스러운", "장난스러운"], "app_mood", "설레는")
+            _a_concept = _app_pick("💡 컨셉", ["저당·제로", "집중·회복 기능성", "계절 한정",
+                                             "레트로 감성", "비건·클린라벨", "편의점 히트상품"],
+                                   "app_concept", "저당·제로")
+            st.caption("🧠 내 MBTI")
+            _MBTI = ["ISTJ", "ISFJ", "INFJ", "INTJ", "ISTP", "ISFP", "INFP", "INTP",
+                     "ESTP", "ESFP", "ENFP", "ENTP", "ESTJ", "ESFJ", "ENFJ", "ENTJ", "모름"]
+            _a_mbti = st.selectbox("MBTI", _MBTI, index=_MBTI.index("ENFP"),
+                                   key="app_mbti", label_visibility="collapsed")
+
+        _mbti_txt = ("MBTI가 %s인 사람" % _a_mbti) if _a_mbti != "모름" else "MBTI를 모르는 사람"
+        prompt_app = (
+            "'나만의 음료 만들기' 앱을 만들어 줘.\n"
+            "사용자가 MBTI, 음료 유형, 좋아하는 맛, 색, 느낌, 컨셉을 고르면\n"
+            "그 조합에 어울리는 음료 이름, 한 줄 소개, 맛 설명, 병 디자인 느낌을 카드로 보여 줘.\n"
+            "처음 화면에는 내 선택을 넣어 둬: %s / %s / %s / %s / %s / %s.\n"
+            "MBTI 성격이 음료 이름과 소개 문구에 재미있게 드러나게 해 줘. 화면은 한 페이지로 간단하게."
+            % (_mbti_txt, _a_type, _a_taste, _a_color, _a_mood, _a_concept)
+        )
+        st.markdown("**📋 완성된 앱 설명 — 복사해서 AI 스튜디오에 붙여넣으세요**")
+        st.code(prompt_app, language=None)
+
+        st.markdown("##### STEP 4. 고쳐 달라고 요청하기")
+        st.caption("왼쪽 대화창에 바꾸고 싶은 점을 말하면 앱이 바뀝니다. 하나씩 요청해 보세요.")
+        show_example("""- 음료 이름 후보를 3개 보여 주고 고를 수 있게 해 줘
+- 결과 카드 배경을 내가 고른 색으로 바꿔 줘
+- 친구 MBTI를 넣으면 둘에게 어울리는 음료를 추천해 줘""")
+
+        st.warning(
+            "⚠️ **AI가 만든 음료 이름·맛 설명은 아이디어일 뿐입니다.** "
+            "실제로 시장에 어떤 제품이 있는지는 다음 탭 **「🛒 온라인 시장분석」** 에서, "
+            "실제 배합은 **STEP 5 배합비 개발**에서 확인합니다. "
+            "회사 내부 자료나 개인정보는 넣지 마세요."
+        )
+
+        st.caption("앱 설명은 자동으로 함께 제출됩니다. 아래 칸에는 앱이 만들어 준 **내 음료 이름·소개**와 "
+                   "고친 점, 공유 링크가 있으면 링크를 붙여넣으세요.")
+        _hw_ui("앱만들기연습", prompt_app, "app_hw_submit",
+               ai_label="내 음료 결과 (음료 이름 · 소개 · 고친 점 · 공유 링크)",
+               title="과제 제출 — 나만의 음료 만들기 앱")
+
     with tab_food:
         show_step_guide(
-            _S4_STEPS, 1,
+            _S4_STEPS, 2,
             todo="식품안전나라 품목제조보고 데이터를 AI에 학습시켜 원재료를 분석합니다.",
             uses="앞 단계에서 정한 제품 카테고리와 분석 관점",
             produces="경쟁 제품 원재료·성분 분석 결과",
@@ -4386,23 +4641,16 @@ AI는 **화면을 볼 수 없습니다.** 그래서 "마켓컬리에서 음료 �
             st.markdown("---")
             st.markdown("**Step 2. ChatGPT에 파일 업로드 후 아래 스크립트 입력**")
             st.code("""#자료배경
-품목제조보고서의 구성은 업체명, 품목유형, 제품명, 성분개수, 성분및 원료, 일자, 유형, 제품형태로 구성되어있다.
+혼합음료 품목제조보고서야. 제품명, 품목유형, 원재료가 들어 있어.
 
-#요청목적
-이 데이터로부터 음료개발에 필요한 정보를 가져올거야
+#요청
+음료 배합비 개발에 쓸 수 있게 아래 2가지만 정리해 줘.
+1. 가장 많이 쓰인 원재료 TOP 10과 사용 빈도
+2. 원재료가 적힌 순서로 본 배합 우선순위 (주원료 → 부원료)
 
-#요청사항
-1. 제품에 사용된 주요원재료, 배합순서, 제품유형, 성분개수로부터 배합비 개발에 필요한 배합순서 및 원재료우선순위를 학습한다.
-2. 제품명으로부터 원재료를 추정하고, 생산트렌드를 학습한다.
-3. 사용된 원재료로부터 사용빈도수를 학습한다.
-4. 이 요청사항은 신제품 음료배합비를 작성하기 위한 데이터이다.
-
-#처리제외
-1. 제품명으로부터 건강기능식품등 음료와 관계없는 데이터는 제외한다.
-
-#이외의 요청사항
-1. 이 자료로 무엇을 할수있는지 나에게 알려줘
-2. 명령을 수행하기전, 사용자에게 지시한 의도가 맞는지 확인하고, 선택여부를 물어본후 출력한다.""", language=None)
+#제외
+음료가 아닌 제품(건강기능식품 등)은 빼 줘.""", language=None)
+            st.caption("💡 요청을 짧게 할수록 빨리, 정확하게 답합니다. 더 궁금한 점은 결과를 본 뒤 이어서 물어보세요.")
 
         # ── 스크립트 작성 과제 ──
         with sub_food_task:
@@ -4415,112 +4663,57 @@ AI는 **화면을 볼 수 없습니다.** 그래서 "마켓컬리에서 음료 �
             st.markdown(_btn_food_html, unsafe_allow_html=True)
             st.markdown("---")
 
-            # ── 힌트 장치 (2행 × 2열) ──
-            st.markdown("**🔧 힌트 선택 — 항목을 골라 초안을 생성하세요**")
-
-            # 행 1: 자료배경설명 | 요청목적
-            col_f1, col_f2 = st.columns([3, 3])
-            with col_f1:
-                st.caption("📂 자료배경설명 — 품목제조보고서 구성 항목 선택 (복수)")
-                _BG_OPTS = [  # 간소화: 5개 -> 4개 (제외: 성분개수)
-                    "업체명",
-                    "품목유형",
-                    "제품명",
-                    "성분 및 사용한 원재료",
-                ]
-                food_bg = st.pills("자료배경설명", _BG_OPTS, selection_mode="multi", key="food_bg", label_visibility="collapsed")
-
-            with col_f2:
-                st.caption("🎯 요청목적")
-                _PURPOSE_OPTS = [  # 간소화: 5개 -> 4개 (제외: 신제품 컨셉 수립 참고)
-                    "배합비 개발을 위한 원재료 분석",
-                    "음료 카테고리별 트렌드 파악",
-                    "경쟁 제품 성분 비교",
-                    "소비자 선호 원재료 도출",
-                ]
-                food_purpose = st.pills("요청목적", _PURPOSE_OPTS, key="food_purpose", label_visibility="collapsed")
-
-            # 행 2: 요청사항(multi) | 처리제외(multi)
+            # ── 힌트 장치 — 정리할 것 / 뺄 것 두 가지만 고른다 ──
+            st.markdown("**🔧 두 가지만 고르면 초안이 만들어집니다**")
             col_f3, col_f4 = st.columns([3, 3])
             with col_f3:
-                st.caption("📋 요청사항 (복수 선택)")
-                _REQ_OPTS = [  # 간소화: 7개 -> 4개 (제외: 배합 순서 도출, 제품명 원재료 추정, 카테고리별 성분 비교)
-                    "주요 원재료 사용 빈도 분석",
-                    "제품유형별 분류 정리",
-                    "생산 트렌드 분석",
-                    "신제품 개발 시사점 도출",
+                st.caption("📋 무엇을 정리할까요? (1~2개 추천)")
+                _REQ_OPTS = [
+                    "원재료 사용 빈도 TOP 10",
+                    "배합 우선순위 (주원료 → 부원료)",
+                    "많이 쓰인 감미료·산미료",
+                    "제품유형별 분류",
                 ]
-                food_reqs = st.pills("요청사항", _REQ_OPTS, selection_mode="multi", key="food_reqs", label_visibility="collapsed")
+                food_reqs = st.pills("요청사항", _REQ_OPTS, selection_mode="multi",
+                                     default=["원재료 사용 빈도 TOP 10"],
+                                     key="food_reqs", label_visibility="collapsed")
 
             with col_f4:
-                st.caption("🚫 처리 제외 (복수 선택)")
-                _EXCL_OPTS = [  # 간소화: 5개 -> 4개 (제외: 10년 이상 된 데이터 제외)
-                    "음료와 관계없는 품목 제외",
-                    "건강기능식품 제외",
-                    "중복 데이터 제거",
-                    "원재료 정보 불명확한 제품 제외",
+                st.caption("🚫 무엇을 뺄까요?")
+                _EXCL_OPTS = [
+                    "음료가 아닌 제품",
+                    "건강기능식품",
+                    "중복 제품",
                 ]
-                food_excls = st.pills("처리제외", _EXCL_OPTS, selection_mode="multi", key="food_excls", label_visibility="collapsed")
-
-            # 행 3: 이외 요청사항(multi, 전폭)
-            st.caption("💬 이외 요청사항 (복수 선택)")
-            _OTHER_OPTS = [  # 간소화: 5개 -> 4개 (제외: 추가 분석 가능 항목 제안)
-                "할 수 있는 작업 목록 먼저 제시",
-                "수행 전 사용자 확인 후 진행",
-                "학습 결과 요약 제공 (10줄 이내)",
-                "가짜 데이터 생성 금지",
-            ]
-            food_others = st.pills("이외요청", _OTHER_OPTS, selection_mode="multi", key="food_others", label_visibility="collapsed")
-
-            st.markdown("---")
+                food_excls = st.pills("처리제외", _EXCL_OPTS, selection_mode="multi",
+                                      default=["음료가 아닌 제품"],
+                                      key="food_excls", label_visibility="collapsed")
 
             # ── 초안 생성 (pending key 패턴) ──
             if "food_draft_pending" in st.session_state:
                 st.session_state["food_user_script"] = st.session_state.pop("food_draft_pending")
 
-            # 노란색 추가 요청사항 입력 영역
-            st.markdown("""<div style="background:#fefce8;border-radius:10px;padding:10px 16px;
-border:2px solid #fde047;margin:8px 0 4px 0;">
-<b style="color:#854d0e;">✏️ 추가 요청사항</b>
-<span style="font-size:12px;color:#92400e;margin-left:8px;">스크립트에 추가할 내용을 자유롭게 입력하세요 (초안에 자동 포함)</span>
-</div>""", unsafe_allow_html=True)
-            food_extra = st.text_area("food_extra_label", key="food_extra", height=80,
-                placeholder="예: 특정 성분 우선 분석, 특정 제조사 제외, 추가 출력 형식 요청 등",
+            food_extra = st.text_input("food_extra_label", key="food_extra",
+                placeholder="✏️ 더 넣고 싶은 요청이 있으면 한 줄로 (예: 제로슈거 제품만 따로 보여 줘)",
                 label_visibility="collapsed")
 
-            st.markdown("---")
-
             if st.button("✏️ 선택 항목으로 초안 생성", key="food_hint_gen_btn", use_container_width=True):
-                _fbg_fields = food_bg or ["업체명", "품목유형", "제품명", "성분개수", "성분 및 사용한 원재료"]
-                _fbg      = f"품목제조보고서의 구성은 {', '.join(_fbg_fields)}로 구성되어있다."
-                _fpurpose = food_purpose or "배합비 개발을 위한 원재료 분석"
-                _freqs    = food_reqs or ["주요 원재료 사용 빈도 분석", "배합 순서 및 우선순위 도출"]
-                _fexcls   = food_excls or ["음료와 관계없는 품목 제외"]
-                _fothers  = food_others or ["수행 전 사용자 확인 후 진행"]
-                _freqs_str  = "\n".join(f"{i+1}. {r}" for i, r in enumerate(_freqs))
-                _fexcls_str = "\n".join(f"{i+1}. {e}" for i, e in enumerate(_fexcls))
-                _fothers_str = "\n".join(f"{i+1}. {o}" for i, o in enumerate(_fothers))
-                _food_draft = f"""#진행조건
-품목제조보고서 자료를 입력받기 전까지 분석 결과를 출력하지 않는다.
-자료 입력 완료 후 아래 요청사항에 따라 분석을 진행한다.
+                _freqs = food_reqs or ["원재료 사용 빈도 TOP 10"]
+                _fexcls = food_excls or ["음료가 아닌 제품"]
+                _freqs_str = "\n".join(f"{i+1}. {r}" for i, r in enumerate(_freqs))
+                _food_draft = f"""#자료배경
+혼합음료 품목제조보고서야. 제품명, 품목유형, 원재료가 들어 있어.
 
-#자료배경설명
-{_fbg}
-
-#요청목적
-{_fpurpose}
-
-#요청사항
+#요청
+음료 배합비 개발에 쓸 수 있게 아래만 정리해 줘.
 {_freqs_str}
 
-#처리제외
-{_fexcls_str}
-
-#이외의 요청사항
-{_fothers_str}"""
+#제외
+빼 줘: {', '.join(_fexcls)}"""
                 if st.session_state.get("food_extra", "").strip():
-                    _food_draft += f"\n\n#추가 요청사항\n{st.session_state['food_extra']}"
+                    _food_draft += f"\n\n#추가 요청\n{st.session_state['food_extra'].strip()}"
                 st.session_state["food_draft_pending"] = _food_draft
+                st.rerun()  # 바로 다시 그려야 아래 스크립트 칸에 초안이 들어간다
 
             food_script = st.text_area(
                 "📝 스크립트 작성",
@@ -4529,7 +4722,7 @@ border:2px solid #fde047;margin:8px 0 4px 0;">
                 placeholder=(
                     "위 힌트에서 항목을 선택한 뒤 [초안 생성] 버튼을 누르거나,\n"
                     "아래에 직접 스크립트를 작성해보세요.\n\n"
-                    "#자료배경설명\n#요청목적\n#요청사항\n#처리제외\n#이외의 요청사항"
+                    "#자료배경\n#요청\n#제외"
                 ),
             )
 
@@ -4543,10 +4736,10 @@ border:2px solid #fde047;margin:8px 0 4px 0;">
     # ── 탭 3: 시장조사 데이터 학습 (편의점 매대 사진 분석) ──
     with tab_learn:
         show_step_guide(
-            _S4_STEPS, 2,
-            todo="편의점 매대 사진을 AI에 올려 진열 SKU 구색을 정량 분석합니다.",
-            uses="앞 두 단계에서 잡은 카테고리 기준",
-            produces="매대 SKU 점유율·경쟁현황 분석 결과",
+            _S4_STEPS, 3,
+            todo="편의점 매대 사진을 AI에 올려, 어떤 음료가 몇 개씩 진열돼 있는지 세어 봅니다.",
+            uses="앞 두 단계에서 정한 음료 종류",
+            produces="종류별 제품 수·비율과 경쟁 현황",
             minutes=12,
         )
         # 편의점 매대 사진 Google Drive 파일 ID — 실습 시간 확보를 위해 5장 압축본에서 2장 개별 링크로 축소
@@ -4575,29 +4768,32 @@ border:2px solid #fde047;margin:8px 0 4px 0;">
             st.markdown(_photo_html, unsafe_allow_html=True)
             st.markdown("---")
             st.markdown("**Step 2. 이미지 업로드 후 아래 스크립트 입력**")
-            st.code("""1. 음료개발 연구원 관점에서 편의점 음료 구색 SKU를 분석하고, 업로드 해준 이미지에서 추출해 (메인 질문)
+            st.code("""1. 나는 음료개발 연구원이야. 올린 편의점 매대 사진에 진열된 음료를 하나씩 읽어 줘.
+   잘 안 보이는 제품은 지어내지 말고 '확인 어려움'이라고 적어 줘.
 
-2. 진열 음료의 음료유형별 세부분류에 대한 정량분석을 통해 시장점유율과 경쟁현황/컨셉/트렌드 분석 진행해
+2. 음료를 종류별(탄산, 커피, 차, 이온음료 등)로 나누고,
+   종류마다 몇 개인지 세어서 비율(%)을 알려 줘.
+   어떤 회사 제품이 많은지, 요즘 어떤 컨셉·맛이 많은지도 알려 줘.
 
-3. raw 데이터 추출하고 여기에 모두 출력
+3. 사진에서 읽은 제품 목록을 빠짐없이 보여 줘.
+   (제품명 | 회사 | 음료 종류 | 용량)
 
-4. 명령: 너의 시스템상 고부하가 걸리지 않게 나눠서 출력
+4. 내용이 길면 나눠서 보여 줘.
 
-5. 보고서를 아래의 양식으로 작성
-   5.1 음료유형별 | SKU 개수 | SKU 점유율 (%) | 전략적 특징
-   5.2 전체품 raw 데이터 정량 결과""", language=None)
+5. 마지막에 아래 표로 정리해 줘.
+   음료 종류 | 제품 수 | 비율(%) | 눈에 띄는 특징""", language=None)
 
         # ── 스크립트 작성 과제 ──
         with sub_learn_task:
             st.markdown("#### 📋 편의점 매대 사진 분석 스크립트 작성 과제")
             st.info(
-                "**과제 목표:** 편의점 매대 사진을 AI에 업로드하고 직접 분석 스크립트를 작성해보세요.\n\n"
-                "사진을 먼저 다운로드한 뒤, 아래 힌트 항목을 선택하여 나만의 분석 스크립트 초안을 생성하세요."
+                "**과제 목표:** 편의점 매대 사진을 AI에 올리고, 내가 알고 싶은 것을 묻는 스크립트를 만들어 보세요.\n\n"
+                "사진을 먼저 다운로드한 뒤, 아래 항목을 골라 초안을 만드세요."
             )
             st.markdown("**Step 1. 편의점 매대 사진 다운로드 (2장)**")
             st.markdown(_photo_html, unsafe_allow_html=True)
             st.markdown("---")
-            st.markdown("**Step 2. 힌트 선택 후 스크립트 초안 생성**")
+            st.markdown("**Step 2. 항목을 고르고 초안 만들기**")
             st.caption("💡 노란색 직접 입력란에 텍스트 입력 후 **Enter**를 눌러 적용하세요.")
 
             def _yellow_input(label, key, placeholder="직접 입력"):
@@ -4609,55 +4805,55 @@ border:2px solid #fde047;margin:8px 0 4px 0;">
                 )
                 return st.text_input(key, key=key, placeholder=placeholder, label_visibility="collapsed")
 
-            # 행 1: 분석 관점 | 음료 카테고리
+            # 행 1: 누구 입장에서 | 어떤 음료를
             col_lrn1, col_lrn2 = st.columns([3, 3])
             with col_lrn1:
-                st.caption("👁️ 분석 관점")
-                _VIEW_OPTS = ["음료개발 연구원", "음료 브랜드 마케터", "카테고리 MD", "소비자 트렌드 분석가"]
+                st.caption("👁️ 누구 입장에서 볼까요?")
+                _VIEW_OPTS = ["음료개발 연구원", "음료 브랜드 마케터", "편의점 상품 기획자", "소비자 트렌드 분석가"]
                 lrn_view = st.pills("분석관점", _VIEW_OPTS, key="lrn_view", label_visibility="collapsed")
-                lrn_view_custom = _yellow_input("직접 입력 (예: 식품 MD)", "lrn_view_custom", "선택 외 관점 직접 입력")
+                lrn_view_custom = _yellow_input("직접 입력 (예: 식품 영업 담당자)", "lrn_view_custom", "다른 입장 직접 입력")
 
             with col_lrn2:
-                st.caption("🥤 음료 카테고리 범위")
-                # 간소화: 6개 -> 4개 (제외: 커피·차 음료, 과채음료)
-                _SCOPE_OPTS = ["RTD 음료 전체", "탄산음료", "기능성·에너지 음료", "식물성 음료"]
+                st.caption("🥤 어떤 음료를 볼까요?")
+                _SCOPE_OPTS = ["음료 전체", "탄산음료", "기능성·에너지 음료", "식물성 음료"]
                 lrn_scope = st.pills("카테고리범위", _SCOPE_OPTS, key="lrn_scope", label_visibility="collapsed")
-                lrn_scope_custom = _yellow_input("직접 입력 (예: 제로슈거 음료)", "lrn_scope_custom", "선택 외 카테고리 직접 입력")
+                lrn_scope_custom = _yellow_input("직접 입력 (예: 제로슈거 음료)", "lrn_scope_custom", "다른 음료 직접 입력")
 
-            # 행 2: 분석 항목(multi) | 출력 방식(multi)
+            # 행 2: 알고 싶은 것(multi) | 보여 주는 방식(multi)
             col_lrn3, col_lrn4 = st.columns([3, 3])
             with col_lrn3:
-                st.caption("🔍 분석 항목 (복수 선택)")
-                _ITEM_OPTS = [  # 간소화: 7개 -> 4개 (제외: 카테고리별 분류, 가격대 분포, 신제품 출시 현황)
-                    "SKU 구성 및 점유율",
-                    "브랜드·제조사 현황",
-                    "컨셉·포지셔닝 분석",
-                    "트렌드 키워드 도출",
+                st.caption("🔍 무엇을 알고 싶나요? (여러 개 선택)")
+                _ITEM_OPTS = [
+                    "종류별 제품 수와 비율",
+                    "회사(브랜드)별 현황",
+                    "제품 컨셉 비교",
+                    "요즘 많이 보이는 맛·키워드",
                 ]
                 lrn_items = st.pills("분석항목", _ITEM_OPTS, selection_mode="multi", key="lrn_items", label_visibility="collapsed")
-                lrn_items_custom = _yellow_input("직접 입력 (예: 용량별 분포)", "lrn_items_custom", "추가 분석 항목 직접 입력")
+                lrn_items_custom = _yellow_input("직접 입력 (예: 용량별 개수)", "lrn_items_custom", "알고 싶은 것 직접 입력")
 
             with col_lrn4:
-                st.caption("📄 출력 방식 (복수 선택)")
-                _OUT_OPTS = [  # 간소화: 5개 -> 4개 (제외: 요약문 추가)
-                    "표 형식 정리",
-                    "raw 데이터 전체 출력",
-                    "단계별 나눠서 출력",
-                    "전략적 특징 포함",
+                st.caption("📄 어떻게 보여 줄까요? (여러 개 선택)")
+                _OUT_OPTS = [
+                    "표로 정리",
+                    "사진 속 제품 목록 전체",
+                    "길면 나눠서",
+                    "눈에 띄는 특징 함께",
                 ]
                 lrn_outs = st.pills("출력방식", _OUT_OPTS, selection_mode="multi", key="lrn_outs", label_visibility="collapsed")
-                lrn_outs_custom = _yellow_input("직접 입력 (예: 그래프 포함)", "lrn_outs_custom", "추가 출력 방식 직접 입력")
+                lrn_outs_custom = _yellow_input("직접 입력 (예: 그래프로)", "lrn_outs_custom", "보여 주는 방식 직접 입력")
 
-            # 행 3: 보고서 항목(multi, 전폭)
-            st.caption("📊 보고서 포함 항목 (복수 선택)")
-            _REPORT_OPTS = [  # 간소화: 5개 -> 4개 (제외: 경쟁현황 요약)
-                "음료유형별 SKU 개수",
-                "SKU 점유율 (%)",
-                "전략적 특징 분석",
-                "신제품 트렌드 시사점",
+            # 행 3: 마지막 정리 표 (multi, 전폭)
+            st.caption("📊 마지막 정리 표에 넣을 칸 (여러 개 선택)")
+            _REPORT_OPTS = [
+                "음료 종류",
+                "제품 수",
+                "비율(%)",
+                "눈에 띄는 특징",
+                "신제품 아이디어",
             ]
             lrn_report = st.pills("보고서항목", _REPORT_OPTS, selection_mode="multi", key="lrn_report", label_visibility="collapsed")
-            lrn_report_custom = _yellow_input("직접 입력 (예: 브랜드별 매출 순위)", "lrn_report_custom", "추가 보고서 항목 직접 입력")
+            lrn_report_custom = _yellow_input("직접 입력 (예: 대표 제품)", "lrn_report_custom", "표에 넣을 칸 직접 입력")
 
             st.markdown("---")
 
@@ -4668,37 +4864,34 @@ border:2px solid #fde047;margin:8px 0 4px 0;">
             if st.button("✏️ 선택 항목으로 초안 생성", key="learn_hint_gen_btn", use_container_width=True):
                 # 선택 pills + 직접입력 모두 결합
                 _lview  = ", ".join(filter(None, [lrn_view, lrn_view_custom.strip()])) or "음료개발 연구원"
-                _lscope = ", ".join(filter(None, [lrn_scope, lrn_scope_custom.strip()])) or "RTD 음료 전체"
-                _litems = (list(lrn_items or []) + ([lrn_items_custom.strip()] if lrn_items_custom.strip() else [])) or ["SKU 구성 및 점유율", "카테고리별 분류"]
-                _louts  = (list(lrn_outs or []) + ([lrn_outs_custom.strip()] if lrn_outs_custom.strip() else [])) or ["표 형식 정리", "raw 데이터 전체 출력"]
-                _lrep   = (list(lrn_report or []) + ([lrn_report_custom.strip()] if lrn_report_custom.strip() else [])) or ["음료유형별 SKU 개수", "SKU 점유율 (%)"]
-                _litems_str = "\n".join(f"{i+1}. {it}" for i, it in enumerate(_litems))
-                _lout_str   = " / ".join(_louts)
+                _lscope = ", ".join(filter(None, [lrn_scope, lrn_scope_custom.strip()])) or "음료 전체"
+                _litems = (list(lrn_items or []) + ([lrn_items_custom.strip()] if lrn_items_custom.strip() else [])) or ["종류별 제품 수와 비율", "회사(브랜드)별 현황"]
+                _louts  = (list(lrn_outs or []) + ([lrn_outs_custom.strip()] if lrn_outs_custom.strip() else [])) or ["표로 정리", "길면 나눠서"]
+                _lrep   = (list(lrn_report or []) + ([lrn_report_custom.strip()] if lrn_report_custom.strip() else [])) or ["음료 종류", "제품 수", "비율(%)"]
+                _litems_str = "\n".join(f"   - {it}" for it in _litems)
+                _lout_str   = ", ".join(_louts)
                 _lrep_str   = " | ".join(_lrep)
-                _learn_draft = f"""1. {_lview} 관점에서 편의점 {_lscope} 카테고리의 SKU를 분석하고, 업로드한 이미지에서 추출해 (메인 질문)
+                _learn_draft = f"""1. 나는 {_lview}이야. 올린 편의점 매대 사진에서 {_lscope}를 하나씩 읽어 줘.
+   잘 안 보이는 제품은 지어내지 말고 '확인 어려움'이라고 적어 줘.
 
-2. 진열 음료의 음료유형별 세부분류에 대한 정량분석을 통해 시장점유율과 경쟁현황/컨셉/트렌드 분석 진행해
-
-분석 항목:
+2. 아래 내용을 알려 줘.
 {_litems_str}
 
-3. raw 데이터 추출하고 여기에 모두 출력
+3. 보여 주는 방식: {_lout_str}
 
-4. 출력 방식: {_lout_str}
-   시스템 고부하가 걸리지 않게 나눠서 출력
-
-5. 보고서를 아래의 양식으로 작성
+4. 마지막에 아래 표로 정리해 줘.
    {_lrep_str}"""
                 st.session_state["learn_draft_pending"] = _learn_draft
+                st.rerun()  # 바로 다시 그려야 아래 스크립트 칸에 초안이 들어간다
 
             learn_script = st.text_area(
                 "📝 스크립트 작성",
                 key="learn_user_script",
                 height=300,
                 placeholder=(
-                    "위 힌트에서 항목을 선택한 뒤 [초안 생성] 버튼을 누르거나,\n"
-                    "아래에 직접 분석 스크립트를 작성해보세요.\n\n"
-                    "1. (분석 관점 + 대상)\n2. (정량분석 방법)\n3. (출력 요청)\n4. (출력 제약)\n5. (보고서 양식)"
+                    "위에서 항목을 고른 뒤 [초안 생성] 버튼을 누르거나,\n"
+                    "아래에 직접 스크립트를 써 보세요.\n\n"
+                    "1. (누구 입장에서, 어떤 음료를)\n2. (알고 싶은 것)\n3. (보여 주는 방식)\n4. (마지막 정리 표)"
                 ),
             )
 
@@ -4713,9 +4906,9 @@ border:2px solid #fde047;margin:8px 0 4px 0;">
     # ── 탭 4: 보고서 작성하기 ──
     with tab_report:
         show_step_guide(
-            _S4_STEPS, 3,
+            _S4_STEPS, 4,
             todo="앞 세 단계의 분석 결과를 하나의 시장분석 보고서로 합칩니다.",
-            uses="온라인 분석 · 원재료 분석 · 매대 SKU 분석 결과 3종",
+            uses="온라인 분석 · 원재료 분석 · 매대 사진 분석 결과 3종",
             produces="신제품 개발 시장분석 보고서",
             minutes=15,
         )
@@ -4783,7 +4976,7 @@ Step 1 &nbsp;·&nbsp; ChatGPT에서 보고서로 출력할 수 있는 스크립�
 [구성]
 1. 시장 현황 — 카테고리별 규모와 채널별 점유율
 2. 소비자 트렌드 — 2026년 소비 키워드와 선호 플레이버 변화
-3. 경쟁 현황 — 주요 브랜드 구도, 매대 SKU 점유율, 원재료 사용 빈도 TOP 10
+3. 경쟁 현황 — 주요 브랜드 구도, 매대에 진열된 음료 종류별 비율, 원재료 사용 빈도 TOP 10
 4. 신제품 추천 3개 — 각각 컨셉·타깃·핵심 원재료·추천 근거
 
 [표]
@@ -4943,7 +5136,7 @@ font-size:15px;color:#1d4ed8;font-weight:700;line-height:1.7;">🎯 학습자 �
     # ── 탭 5: AI 간 대화전환 ──
     with tab_ai:
         show_step_guide(
-            _S4_STEPS, 4,
+            _S4_STEPS, 5,
             todo="완성한 보고서를 다른 AI로 넘겨 이어서 작업하는 방법을 익힙니다.",
             uses="앞 단계에서 만든 시장분석 보고서",
             produces="AI 인수인계용 요약 스크립트 — STEP 5 배합비 개발로 연결",
@@ -5086,14 +5279,32 @@ Round 3 &nbsp;·&nbsp; Gemini가 출력한 결과를 제출하세요
 elif section == "3️⃣ 제품개발용 데이터":
     show_banner(
         "제품개발을 위한 데이터 만들기",
-        "원료·배합 레퍼런스, 시장 현황, 이론 지식 등을 AI로 정리하고 ChatGPT 프로젝트 소스로 쌓는 방법을 훈련합니다.",
+        "원료·배합 레퍼런스, 시장 현황 등을 AI로 찾아 지식베이스(라이브러리)와 프로젝트 소스로 쌓는 방법을 훈련합니다.",
         "3 / 7"
     )
     show_mission([
         "어떤 데이터가 제품 개발에 필요한지 유형별로 파악하기",
-        "AI에게 데이터를 정리·수집해 달라는 스크립트 작성하기",
-        "정리된 데이터를 ChatGPT 프로젝트 소스로 추가하는 방법 익히기",
+        "세 가지 자료 유형 중 1가지를 골라, 내 분야에 맞는 수집 스크립트 작성하기 (연습용)",
+        "찾은 자료를 지식베이스(라이브러리)에 등록해 불러 쓰고, 프로젝트 소스로 등록하는 방법 익히기",
     ])
+    st.info(
+        "📌 **수업에 쓰는 자료는 강사가 따로 드립니다.** 이 단계의 수집 스크립트는 "
+        "'자료를 찾게 하는 법'을 익히는 **연습용**입니다. 세 가지 중 **1가지만** 골라 "
+        "한 번 실행해 보고, 결과 5개 정도만 확인하면 충분합니다."
+    )
+
+    # ── 내 분야(STEP 2 연구원 분야와 같은 목록) → 그 분야의 대표 제품 ──
+    _S3_FIELDS = {
+        "💪 기능성음료 개발연구원":       ["단백질음료", "전해질음료", "에너지드링크", "비타민워터"],
+        "🥤 탄산음료 개발연구원":         ["탄산음료", "제로슈거 탄산", "스파클링 과즙음료", "토닉·소다"],
+        "🌱 식물성·과채음료 개발연구원":  ["귀리음료", "두유", "착즙주스", "콤부차"],
+        "🥛 유제품 개발연구원":           ["그릭요거트", "발효유", "고단백 유음료", "식물성 대체유"],
+        "🍪 제과·스낵 개발연구원":        ["쌀과자", "프리미엄 스낵", "글루텐프리 과자", "저칼로리 간식"],
+        "🧊 냉동식품 개발연구원":         ["냉동만두", "냉동피자", "냉동 볶음밥", "에어프라이어 스낵"],
+        "🍱 HMR·간편식 개발연구원":       ["냉동 밀키트", "컵밥·컵국", "프리미엄 도시락", "식물성 HMR"],
+        "🥗 프레시푸드·샐러드 개발연구원": ["편의점 샐러드", "컷팅 과일·채소", "신선 도시락", "그레인 볼"],
+    }
+    _S3_BEV = ("💪 기능성음료 개발연구원", "🥤 탄산음료 개발연구원", "🌱 식물성·과채음료 개발연구원")
 
     # ── 음료 카테고리 선택 옵션 ──────────────────────────────
     # 간소화: 10개 -> 4개 (제외: 커피·차 음료(RTD), 유음료·발효유, 과채음료,
@@ -5256,29 +5467,28 @@ elif section == "3️⃣ 제품개발용 데이터":
     }
     # ─────────────────────────────────────────────────────────
 
-    _S3_STEPS = ["예시 보기", "수집 스크립트 작성", "AI에게 학습시키기"]
+    _S3_STEPS = ["예시 보기", "수집 스크립트 작성", "라이브러리 등록", "프로젝트 소스 등록"]
 
-    tab_ex, tab_collect, tab_project = st.tabs([
+    tab_ex, tab_collect, tab_library, tab_project = st.tabs([
         "📖 예시 스크립트 보기",
         "🗂️ 데이터 수집 스크립트 만들기",
-        "🧠 AI에게 학습시키기",
+        "📚 지식베이스(라이브러리) 등록하기",
+        "📁 프로젝트 소스로 등록하기",
     ])
 
     with tab_ex:
         show_step_guide(
             _S3_STEPS, 0,
-            todo="예시 수집 스크립트를 그대로 실행해보고, 어떤 자료가 모이는지 확인합니다.",
+            todo="예시 3가지 중 1가지만 골라 실행해 보고, 어떤 자료가 모이는지 확인합니다. (연습용)",
             produces="수집 스크립트의 기본 골격",
             minutes=5,
         )
-        st.markdown("#### 📋 데이터 수집 스크립트 3가지 — 복사해서 ChatGPT에 붙여넣으세요")
-        st.info("아래 스크립트를 복사해 ChatGPT에 붙여넣으면 자료 목록을 받을 수 있습니다.")
-        st.caption("법규 나열이 아니라 실제 배합에 쓰는 기술자료를 찾도록 조건을 걸어두었습니다.")
-
-        # ── 스크립트 1: 배합·공정 기술자료 ──
-        st.markdown("##### 1️⃣ 배합·공정 기술자료")
-        st.caption("아래 ⬛ 부분을 본인이 맡은 제품·원료로 바꿔서 쓰세요. 사람마다 다른 결과가 나옵니다.")
-        st.code("""⬛탄산음료⬛ 배합 설계에 참고할 자료를 찾아줘.
+        st.markdown("#### 📋 세 가지 중 내 분야에 쓰고 싶은 1가지만 고르세요")
+        st.caption("세 개를 다 할 필요 없습니다. 고른 1가지를 복사해 ChatGPT에 붙여넣고, ⬛ 부분만 내 제품·원료로 바꾸세요.")
+        _EX3 = {
+            "1️⃣ 배합·공정 기술자료": (
+                "원료를 몇 % 넣는지, 공정 조건이 어떤지 숫자로 알고 싶을 때 — 특허 [실시예]가 핵심",
+                """⬛탄산음료⬛ 배합 설계에 참고할 자료를 찾아줘.
 특히 ⬛감미료⬛ 쪽을 자세히 보고 싶어.
 
 [필요한 것]
@@ -5312,13 +5522,10 @@ elif section == "3️⃣ 제품개발용 데이터":
 [못 찾았을 때]
 - 조건에 맞는 자료가 없으면 억지로 채우지 말고 '못 찾았다'고 해줘.
 - 대신 어떻게 바꿔서 찾으면 좋을지 2가지만 제안해줘.
-  (검색어를 바꾼다 / 다른 종류의 자료를 본다 / 어디에 문의한다 등)""", language=None)
-
-        st.markdown("---")
-
-        # ── 스크립트 2: 시장·트렌드 ──
-        st.markdown("##### 2️⃣ 시장·신제품 트렌드")
-        st.code("""2026년 ⬛탄산음료⬛ 신제품 기획에 쓸 시장·트렌드 자료를 찾아줘.
+  (검색어를 바꾼다 / 다른 종류의 자료를 본다 / 어디에 문의한다 등)"""),
+            "2️⃣ 시장·신제품 트렌드": (
+                "어떤 컨셉·맛이 실제로 출시되고 있는지 알고 싶을 때 — 업계 매체·통계",
+                """2026년 ⬛탄산음료⬛ 신제품 기획에 쓸 시장·트렌드 자료를 찾아줘.
 
 [필요한 것]
 어떤 컨셉과 플레이버가 실제로 출시되고 있는지, 해외에서 먼저 뜨는 흐름은 무엇인지
@@ -5344,13 +5551,10 @@ elif section == "3️⃣ 제품개발용 데이터":
 [못 찾았을 때]
 - 조건에 맞는 자료가 없으면 억지로 채우지 말고 '못 찾았다'고 해줘.
 - 대신 어떻게 바꿔서 찾으면 좋을지 2가지만 제안해줘.
-  (검색어를 바꾼다 / 다른 종류의 자료를 본다 / 어디에 문의한다 등)""", language=None)
-
-        st.markdown("---")
-
-        # ── 스크립트 3: 원료 성분 데이터베이스 ──
-        st.markdown("##### 3️⃣ 원료 성분 데이터베이스")
-        st.code("""⬛탄산음료⬛ 배합비 계산에 쓸 원료 수치 데이터를 찾아줘.
+  (검색어를 바꾼다 / 다른 종류의 자료를 본다 / 어디에 문의한다 등)"""),
+            "3️⃣ 원료 성분 데이터베이스": (
+                "당도·산도·감미도·사용 한도처럼 계산에 넣을 숫자가 필요할 때 — 공공 DB",
+                """⬛탄산음료⬛ 배합비 계산에 쓸 원료 수치 데이터를 찾아줘.
 
 [필요한 것]
 과일 농축액의 당도(브릭스)·산도, 당류별 감미도, 첨가물 사용 한도 같은
@@ -5380,41 +5584,64 @@ elif section == "3️⃣ 제품개발용 데이터":
 [못 찾았을 때]
 - 조건에 맞는 자료가 없으면 억지로 채우지 말고 '못 찾았다'고 해줘.
 - 대신 어떻게 바꿔서 찾으면 좋을지 2가지만 제안해줘.
-  (검색어를 바꾼다 / 다른 종류의 자료를 본다 / 어디에 문의한다 등)""", language=None)
+  (검색어를 바꾼다 / 다른 종류의 자료를 본다 / 어디에 문의한다 등)"""),
+        }
+        _ex_pick = st.radio("예시 고르기", list(_EX3.keys()), horizontal=True,
+                            key="d_ex_pick", label_visibility="collapsed")
+        st.markdown("**언제 고르나요?** " + _EX3[_ex_pick][0])
+        st.code(_EX3[_ex_pick][1], language=None)
 
     with tab_collect:
         show_step_guide(
             _S3_STEPS, 1,
-            todo="필요한 자료 분야를 고르고 조건을 채워 나만의 수집 스크립트를 완성합니다.",
-            uses="STEP 2에서 만든 페르소나(연구원 역할)",
+            todo="내 분야에서 쓰고 싶은 자료 1가지를 골라 나만의 수집 스크립트를 완성하고, 한 번 실행해 봅니다. (연습용)",
+            uses="STEP 2에서 고른 연구원 분야",
             produces="나만의 데이터 수집 스크립트와 수집한 자료 목록",
             minutes=15,
         )
-        st.markdown("#### 📝 나만의 수집 스크립트 만들기")
-        st.caption("① 분야 → ② 제품 → ③ 조건 → ④ 출력 순서로 고르면 아래에 스크립트가 완성됩니다.")
+        st.markdown("#### 📝 나만의 수집 스크립트 만들기 — 1가지만")
+        st.caption("① 내 분야 → ② 자료 유형 1가지 → ③ 제품 → ④ 조건 → ⑤ 출력 순서로 고르면 아래에 스크립트가 완성됩니다.")
 
-        # ── ① 분야 ─────────────────────────────────────────
-        st.markdown('<span class="ml-step">① 어떤 자료가 필요한가요?</span>',
+        # ── ① 내 분야 ──────────────────────────────────────
+        st.markdown('<span class="ml-step">① 내 분야는? (STEP 2 연구원 분야가 자동 선택됩니다)</span>',
+                    unsafe_allow_html=True)
+        _my_keys = list(_S3_FIELDS.keys())
+        _my_default = st.session_state.get("_my_field")
+        if _my_default not in _S3_FIELDS:
+            _my_default = _my_keys[0]
+        _mysel = st.pills("내 분야", _my_keys, default=_my_default,
+                          key="d_myfield", label_visibility="collapsed")
+        _myfield = _mysel or _my_default
+
+        # ── ② 자료 유형 1가지 ──────────────────────────────
+        st.markdown('<span class="ml-step">② 세 가지 중 1가지만 고르세요</span>',
                     unsafe_allow_html=True)
         _F3 = ["⚗️ 배합·공정", "📈 시장·트렌드", "🧪 원료 성분"]
-        _fsel = st.pills("분야", _F3, default="⚗️ 배합·공정",
+        _F3_DESC = {
+            "⚗️ 배합·공정": "원료를 몇 % 넣는지, 공정 조건이 어떤지 숫자로",
+            "📈 시장·트렌드": "어떤 컨셉·맛이 실제로 출시되고 있는지",
+            "🧪 원료 성분": "당도·산도·사용 한도 등 계산에 넣을 숫자",
+        }
+        _fsel = st.pills("자료 유형", _F3, default="⚗️ 배합·공정",
                          key="d_field", label_visibility="collapsed")
         _field = _fsel or "⚗️ 배합·공정"
+        st.caption("👉 " + _F3_DESC[_field])
 
-        # ── ② 제품 ─────────────────────────────────────────
-        st.markdown('<span class="ml-step">② 어떤 제품인가요?</span>',
+        # ── ③ 제품 (내 분야의 대표 제품) ───────────────────
+        st.markdown('<span class="ml-step">③ 어떤 제품인가요?</span>',
                     unsafe_allow_html=True)
-        _PROD = ["탄산음료", "커피음료", "과일주스", "차음료",
-                 "단백질음료", "식물성음료", "이온음료", "제로음료"]
-        _psel = st.pills("제품", _PROD, default="탄산음료",
-                         key="d_prod", label_visibility="collapsed")
+        _PROD = _S3_FIELDS[_myfield]
+        # 분야가 바뀌면 선택지가 달라지므로 분야별로 위젯 키를 나눈다
+        _psel = st.pills("제품", _PROD, default=_PROD[0],
+                         key="d_prod_%d" % _my_keys.index(_myfield),
+                         label_visibility="collapsed")
         _pcustom = st.text_input("제품 직접 입력", key="d_prod_custom",
-                                 placeholder="직접 입력 (예: 무가당 스파클링)",
+                                 placeholder="직접 입력 (예: 무가당 스파클링, 저당 그래놀라바)",
                                  label_visibility="collapsed")
-        _product = _pcustom.strip() or _psel or "탄산음료"
+        _product = _pcustom.strip() or _psel or _PROD[0]
 
-        # ── ③ 분야별 조건 ──────────────────────────────────
-        st.markdown('<span class="ml-step">③ 조건을 정하세요</span>',
+        # ── ④ 분야별 조건 ──────────────────────────────────
+        st.markdown('<span class="ml-step">④ 조건을 정하세요</span>',
                     unsafe_allow_html=True)
 
         def _merge(picked, typed, fallback):
@@ -5431,7 +5658,7 @@ elif section == "3️⃣ 제품개발용 데이터":
             with _c1:
                 st.caption("자세히 보고 싶은 원료")
                 _ING = ["감미료", "산미료", "안정제·유화제", "기능성 원료", "향료",
-                        "과일류(과즙·농축액)", "우유기반(유단백·유크림)"]
+                        "과일류(과즙·농축액)", "우유기반(유단백·유크림)", "전분·곡분", "유지"]
                 _ing_p = st.pills("원료", _ING, selection_mode="multi",
                                   default=["감미료"], key="d_ing",
                                   label_visibility="collapsed")
@@ -5527,7 +5754,9 @@ elif section == "3️⃣ 제품개발용 데이터":
             _scope_txt = "%s 기준 %s, %s" % (_reg_txt, _per or "최근 2년", _watch_txt)
             _need = _watch_txt + " 를 알 수 있는 자료"
             _where = (
-                "- 업계 매체: FoodNavigator, BeverageDaily, Food Business News, 식품음료신문\n"
+                "- 업계 매체: FoodNavigator, "
+                + ("BeverageDaily, " if _myfield in _S3_BEV else "")
+                + "Food Business News, 식품음료신문\n"
                 "- 시장조사사 무료 공개분: Innova Market Insights, Mintel 보도자료\n"
                 "- 국내 통계: aT 식품산업통계정보(FIS), 농식품수출정보(KATI)"
             )
@@ -5543,7 +5772,7 @@ elif section == "3️⃣ 제품개발용 데이터":
             _c1, _c2 = st.columns(2)
             with _c1:
                 st.caption("필요한 수치")
-                _NUM = ["당도(브릭스)", "산도", "감미도", "사용 한도", "영양성분"]
+                _NUM = ["당도(브릭스)", "산도", "감미도", "사용 한도", "영양성분", "수분·수분활성도"]
                 _num_p = st.pills("수치", _NUM, selection_mode="multi",
                                   default=["당도(브릭스)", "산도"], key="d_num",
                                   label_visibility="collapsed")
@@ -5573,8 +5802,8 @@ elif section == "3️⃣ 제품개발용 데이터":
             _extra_out = "- 수치는 단위와 기준(무엇을 100으로 본 값인지)을 함께 적어줘.\n"
             _head = "%s 배합비 계산에 쓸 원료 수치 데이터를 찾아줘." % _product
 
-        # ── ④ 출력 형식 ────────────────────────────────────
-        st.markdown('<span class="ml-step">④ 결과를 어떻게 보여줄까요?</span>',
+        # ── ⑤ 출력 형식 ────────────────────────────────────
+        st.markdown('<span class="ml-step">⑤ 결과를 어떻게 보여줄까요?</span>',
                     unsafe_allow_html=True)
         _OUT3 = {
             "하나씩 목록으로": "자료명 / 어디에 있는지 / 어떻게 찾는지 / 무슨 내용인지 순으로 5개만.",
@@ -5619,98 +5848,119 @@ elif section == "3️⃣ 제품개발용 데이터":
                with_file=True, guide_type="gpt")
 
 
-    with tab_project:
+    # ── 📚 지식베이스(라이브러리) 등록하기 — 기본 실습 ─────────
+    with tab_library:
         show_step_guide(
             _S3_STEPS, 2,
-            todo="모은 자료를 ChatGPT 프로젝트에 올리고, AI가 그 자료로 답하게 만듭니다.",
-            uses="앞 단계 스크립트로 수집한 자료 파일·링크",
-            produces="내 자료를 근거로 답하는 AI 프로젝트 — STEP 4 시장분석의 기반",
-            minutes=15,
+            todo="찾은 자료를 워드 파일로 만들어 라이브러리에 등록하고, 새 대화에서 불러와 씁니다.",
+            uses="앞 탭에서 찾은 자료 + 강사가 준 수업 자료",
+            produces="라이브러리에 저장된 내 지식 파일",
+            minutes=12,
         )
-        st.markdown("#### 🧠 ChatGPT 프로젝트에 자료 올리고 학습시키기")
-        st.info("ChatGPT의 '프로젝트' 기능을 활용하면 수집한 데이터를 AI 대화의 영구 참조 소스로 등록할 수 있습니다. 한 번 등록하면 같은 프로젝트 내 모든 대화에서 AI가 자동으로 참조합니다.")
-
-        st.markdown("---")
-        st.markdown("##### STEP 1. ChatGPT 프로젝트 생성")
-        show_example("""1. ChatGPT 접속 → 좌측 사이드바 상단 '프로젝트' 클릭
-2. '+ 새 프로젝트' 선택
-3. 프로젝트명 입력 예: '저당 RTD 음료 개발 2026'
-4. 필요시 프로젝트 설명 추가 (예: '2026년 여름 출시 저당 음료 개발 전용 작업공간')""")
-
-        st.markdown("##### STEP 2. 데이터 수집 스크립트 실행")
-        show_example("""1. 위 [🗂️ 데이터 수집 스크립트 만들기] 탭에서 원하는 데이터 유형 선택
-2. 항목 수정 후 '이를 적용하기' 클릭 → 프롬프트 복사
-3. ChatGPT 새 대화창에 붙여넣기 → AI가 데이터 정리 결과 출력
-4. AI 결과를 전체 선택 → 복사""")
-
-        st.markdown("##### STEP 3. 올리기 전에 파일 점검하기")
-        st.caption("이 점검을 건너뛰면 올려도 AI가 못 읽거나 엉뚱한 걸 물어옵니다.")
-        st.error(
-            "⚠️ **가장 흔한 실패 — 스캔한 PDF는 한 글자도 못 읽습니다.** "
-            "PDF를 열어 마우스로 글자가 드래그되면 정상, 안 되면 그림입니다. "
-            "그림이면 텍스트로 옮기거나 다른 자료를 찾으세요."
-        )
-        st.warning(
-            "⚠️ **엑셀(.xlsx)은 지식으로 등록해도 내용을 못 읽는 경우가 많습니다.** "
-            "배합비처럼 숫자가 중요한 자료는 **CSV로 바꿔서** 올리세요. "
-            "엑셀에서 `파일 → 다른 이름으로 저장 → **CSV UTF-8(쉼표로 분리)**` "
-            "(그냥 CSV로 하면 한글이 깨집니다). 시트가 여러 개면 시트마다 한 파일씩."
-        )
-        with st.expander("📋 나머지 점검 항목 6가지"):
-            st.markdown("""
-| 점검 | 왜 |
-|---|---|
-| **파일 하나에 주제 하나** | 시장자료·원료데이터를 한 파일에 몰면 엉뚱한 대목을 물어옵니다 |
-| **파일명을 내용으로** | 파일명이 검색 단서입니다. `자료1.pdf` ❌ → `감미료_사용한도_EFSA_2023.pdf` ⭕ |
-| **첫머리에 출처·날짜** | 문서 맨 앞에 적어두면 AI가 "○○ 자료(2023년) 기준"이라고 근거를 댈 수 있습니다 |
-| **표는 이미지 말고 텍스트로** | 표 그림은 무시됩니다. 숫자가 중요하면 **CSV**로 따로 올리세요 |
-| **표는 단순하게** | 병합셀·수식·제목행이 있으면 표 구조를 못 잡습니다. 첫 줄은 항목명, 아래는 값만 |
-| **중복·옛날 버전 빼기** | 비슷한 파일이 여럿이면 옛날 값을 물어옵니다 |
-""")
-
-        st.markdown("##### STEP 4. ChatGPT 프로젝트에 소스로 추가하기")
-        show_example("""1. STEP2에서 받은 결과 파일 준비
-   - 파일 링크로 뜬 경우 → 링크 클릭해 파일 다운로드
-   - 이미 다운로드된 경우 → 해당 파일 그대로 사용
-2. ChatGPT 프로젝트 열기 → '파일 추가'(소스 추가) 클릭
-3. 준비한 파일 선택 → 업로드
-4. 프로젝트 소스 목록에 파일이 표시되는지 확인""")
-
-        st.markdown("##### STEP 5. 프로젝트 지시문 설정하기 ★ 가장 중요")
-        st.caption(
-            "파일만 올리면 AI는 올린 자료를 안 보고 원래 알던 지식으로 답합니다. "
-            "프로젝트 설정의 '지시사항(Instructions)'에 아래를 넣으세요."
+        st.markdown("#### 📚 지식베이스(라이브러리) 등록하기")
+        st.info(
+            "**라이브러리 = 내 자료 보관함.** ChatGPT에 올리거나 ChatGPT가 만든 **파일**은 "
+            "라이브러리에 자동 저장되고, 어느 대화에서든 다시 불러올 수 있습니다. "
+            "화면에 나온 답변 글은 저장되지 않으니 **꼭 파일로** 만드세요."
         )
 
-        st.code("""- 내가 요청할 때만 등록한 지식에 근거해 답한다.
-- 페르소나는 내가 이 프로젝트에서 만든 페르소나를 사용한다.""",
-                language=None)
+        st.markdown("##### STEP 1. 찾은 자료를 워드 파일로 만들기")
+        st.caption("앞 탭의 수집 스크립트로 자료를 찾은 그 대화창에 아래를 이어서 붙여넣으세요.")
+        st.code("""위에서 찾은 자료를 워드 파일(.docx)로 정리해서 만들어 줘.
+자료마다 이름 / 출처(링크) / 핵심 수치(단위 그대로) / 내 제품에 쓸 점을 적고,
+원문에 없는 숫자는 만들지 마.
+파일 이름은 내용이 보이게 지어 줘. 예) 감미료_배합사례_2026.docx""", language=None)
+        with st.expander("파일이 안 만들어질 때 — 직접 만들어 올리기"):
+            st.markdown(
+                "1. AI 답변을 복사해 **워드(또는 한글)** 에 붙여넣고 저장합니다.\n"
+                "2. ChatGPT 대화창의 **'+'(첨부)** 로 그 파일을 한 번 올립니다.\n"
+                "3. 올린 파일은 라이브러리의 **'업로드됨'** 에 저장됩니다."
+            )
 
-        st.caption(
-            "💡 **자료는 기본이 꺼져 있습니다.** 평소에는 평소대로 답하고, "
-            "지식을 쓰게 하려면 **\"등록한 자료 기준으로\"** 처럼 요청할 때만 씁니다."
-        )
+        st.markdown("##### STEP 2. 라이브러리에서 확인하기")
+        show_example("""1. ChatGPT 웹 화면 왼쪽 사이드바 → '라이브러리(Library)'
+2. '생성됨(Generated)'에 STEP 1의 워드 파일이 보이면 등록 완료
+3. 강사가 준 수업 자료는 대화창 '+'로 한 번 올리면 '업로드됨(Uploaded)'에 등록됩니다""")
+        st.caption("⚠️ 임시 채팅에서 만든·올린 파일은 저장되지 않습니다. 대화를 지워도 라이브러리의 파일은 남습니다.")
+        with st.expander("📋 올리기 전 점검 — AI가 못 읽는 파일"):
+            st.markdown(
+                "- **스캔한 PDF는 못 읽습니다.** 글자가 마우스로 드래그되면 정상, 안 되면 그림입니다.\n"
+                "- **엑셀(.xlsx)은 잘 못 읽습니다.** 숫자 자료는 `CSV UTF-8(쉼표로 분리)`로 저장해 올리세요.\n"
+                "- **파일 하나에 주제 하나**, **파일 이름은 내용이 보이게** (`자료1.pdf` ❌ → `감미료_사용한도_2023.pdf` ⭕)"
+            )
 
-        st.markdown("##### STEP 6. AI 학습결과 확인")
-        st.caption("올린 자료를 실제로 읽고 있는지 확인하세요. 아래를 그대로 물어보면 됩니다.")
-        _CHECK_SCRIPT = """지금 프로젝트에 올라와 있는 자료 목록을 먼저 보여줘.
+        st.markdown("##### STEP 3. 새 대화에서 불러와 쓰기 ★ 실습")
+        show_example("""1. ChatGPT에서 '새 채팅' 열기
+2. 입력창 왼쪽 '+' → '라이브러리에서 추가(Add from library)' → STEP 1의 파일(또는 강사 자료) 선택
+3. 아래 확인 질문을 붙여넣고 보내기""")
+        _CHECK_SCRIPT = """지금 이 대화에 첨부한 파일 목록을 먼저 보여줘.
 
-그다음, 그 자료에서 감미료 사용량이 어떻게 나와 있는지 알려줘.
-어느 파일의 어느 부분에서 봤는지도 함께 적어줘."""
+그다음, 그 파일에서 내 제품 개발에 바로 쓸 수 있는 핵심 수치 3가지를 알려줘.
+어느 파일의 어느 부분에서 봤는지도 함께 적어줘.
+파일에 없는 내용은 지어내지 말고 '파일에 없음'이라고 해줘."""
         st.code(_CHECK_SCRIPT, language=None)
         st.markdown(
-            "- **파일명을 대며 답하면** 자료를 제대로 읽고 있는 것입니다. ✅\n"
-            "- **파일 언급 없이 술술 답하면** 자료를 안 보고 원래 지식으로 답하는 것입니다. "
-            "STEP 6 지시문을 다시 확인하세요. ⚠️"
+            "- **파일명을 대며 수치를 답하면** 제대로 불러온 것입니다. ✅\n"
+            "- **파일 언급 없이 답하면** 첨부가 안 된 것입니다. 2번을 다시 확인하세요. ⚠️"
         )
 
-        st.markdown("---")
-        st.caption(
-            "위 질문을 AI에 넣고 받은 답변을 아래 **AI 학습결과 확인 답변** 칸에 붙여넣어 제출하세요."
-        )
+        st.caption("AI가 답한 내용을 아래 **AI 학습결과 확인 답변** 칸에 붙여넣어 제출하세요.")
         _hw_ui("데이터학습지시", _CHECK_SCRIPT, "train_hw_submit",
                ai_label="AI 학습결과 확인 답변",
-               title="과제 제출 — AI 학습결과 확인")
+               title="과제 제출 — 라이브러리에서 불러온 결과")
+
+    # ── 📁 프로젝트 소스로 등록하기 — 심화 ─────────────────────
+    with tab_project:
+        show_step_guide(
+            _S3_STEPS, 3,
+            todo="같은 자료로 계속 일할 때를 위해, 프로젝트를 만들고 자료를 소스로 등록합니다. (심화)",
+            uses="라이브러리에 등록한 지식 파일",
+            produces="내 자료를 자동으로 참조하는 AI 작업실 — STEP 4 시장분석의 기반",
+            minutes=10,
+        )
+        st.markdown("#### 📁 프로젝트 소스로 등록하기")
+        st.info(
+            "**프로젝트 = 작업실.** 소스로 등록한 자료는 그 프로젝트 안의 **모든 대화가 자동으로** 참조합니다. "
+            "라이브러리처럼 대화마다 불러올 필요가 없습니다."
+        )
+
+        st.markdown("##### STEP 1. 프로젝트 만들기")
+        show_example("""1. 왼쪽 사이드바 '프로젝트' → '+ 새 프로젝트'
+2. 이름 입력 예) 저당 RTD 음료 개발 2026""")
+
+        st.markdown("##### STEP 2. 소스(파일) 등록하기")
+        show_example("""1. 프로젝트 화면의 소스(파일) 목록에서 파일 추가
+   - 라이브러리에서 고르는 메뉴가 보이면 그대로 선택
+   - 안 보이면 라이브러리에서 파일을 내려받아 다시 올리기
+2. 지금 개발하는 제품에 꼭 필요한 파일만 올리기 (많을수록 엉뚱한 파일을 참조합니다)""")
+
+        st.markdown("##### STEP 3. 지시사항 넣기")
+        st.caption("프로젝트 설정의 '지시사항(Instructions)'에 아래 두 줄을 넣으세요.")
+        st.code("""- 내가 요청할 때만 등록한 지식에 근거해 답한다.
+- 페르소나는 내가 이 프로젝트에서 만든 페르소나를 사용한다.""", language=None)
+        st.caption("💡 평소에는 평소대로 답하고, **\"등록한 자료 기준으로\"** 라고 요청할 때만 자료를 씁니다.")
+
+        st.markdown("##### STEP 4. 프로젝트 안에서 확인하기")
+        st.caption("프로젝트 안에서 새 대화를 열고 아래를 물어보세요. 파일을 따로 첨부하지 않아도 답하면 성공입니다.")
+        st.code("""등록한 자료 기준으로 답해줘.
+이 프로젝트에 등록된 파일 목록을 먼저 보여주고,
+그 자료에서 내 제품 개발에 쓸 핵심 수치 3가지를 어느 파일에서 봤는지와 함께 알려줘.""", language=None)
+
+        st.markdown("---")
+        st.markdown("##### ⚖️ 라이브러리 vs 프로젝트 소스 — 언제 무엇을 쓰나")
+        st.markdown("""
+| | 📚 라이브러리 | 📁 프로젝트 소스 |
+|---|---|---|
+| **비유** | 자료 보관함 | 작업실 |
+| **등록** | 올리거나 AI가 만든 파일이 **자동 저장** | 프로젝트에 **직접 추가** |
+| **쓰는 곳** | 어느 대화에서든 | 그 프로젝트 안에서만 |
+| **AI가 보는 방식** | 대화마다 **직접 불러와야** 봄 | 프로젝트 안 모든 대화가 **자동 참조** |
+| **답하는 규칙** | 없음 — 매번 "이 파일 기준으로" 요청 | 지시사항으로 고정 |
+| **파일 수** | 많이 보관 가능 | 요금제별 파일 수 제한 |
+| **주의** | 불러오기를 잊으면 원래 지식으로 답함 | 파일이 많으면 엉뚱한 파일 참조 |
+""")
+        st.success("**정리:** 지식 파일은 라이브러리에 쌓아 두고, 지금 개발하는 제품에 꼭 필요한 파일만 골라 프로젝트 소스로 올립니다.")
+        st.caption("이 탭은 심화 실습이라 따로 제출하지 않습니다.")
 
 # ----------------------------------------------------------
 # 5. 배합비 개발
@@ -5718,12 +5968,12 @@ elif section == "3️⃣ 제품개발용 데이터":
 elif section == "5️⃣ 배합비 개발":
     show_banner(
         "배합비 개발",
-        "Gemini Gem에 등록된 음료개발 데이터베이스를 활용하여 신제품 음료 배합비를 AI와 함께 작성합니다.",
+        "ChatGPT 프로젝트 소스로 등록한 음료개발 데이터베이스를 근거로, 제품기획안을 배합비로 바꿉니다.",
         "5 / 7"
     )
     show_mission([
-        "Gem에 등록된 '음료개발_데이터베이스' 파일을 AI가 학습한 후 배합비를 작성하도록 스크립트 작성하기",
-        "제품 컨셉·기능성 성분·과일향 조건을 스크립트에 반영하기",
+        "'음료개발_데이터베이스'를 STEP 3에서 만든 ChatGPT 프로젝트에 소스로 등록하기",
+        "STEP 4에서 훈련한 AI에게 제품기획안을 받아 배합비 스크립트로 바꾸기",
         "배합시뮬레이터 구조를 반영한 텍스트 표로 원재료·배합비·단가·이화학 계산이 포함된 결과물 받기",
     ])
 
@@ -5761,7 +6011,26 @@ elif section == "5️⃣ 배합비 개발":
             minutes=5,
         )
         st.markdown("#### 📊 '음료개발_데이터베이스'란?")
-        st.info("Gemini Gem의 지식(소스)으로 등록해둔 구글시트로, 10개의 탭에 배합비 개발에 필요한 데이터가 정리되어 있습니다. AI는 배합비를 작성하기 전 이 데이터를 먼저 학습합니다.")
+        st.info("10개의 탭에 배합비 개발에 필요한 데이터가 정리된 엑셀 파일입니다. "
+                "**STEP 3에서 만든 ChatGPT 프로젝트에 소스로 등록**해 두면, 그 프로젝트 안의 대화가 "
+                "배합비를 작성할 때 이 데이터를 근거로 씁니다.")
+        st.markdown("##### 📁 프로젝트 소스로 등록하기 ★ 먼저 하세요")
+        st.markdown(
+            '<a href="https://docs.google.com/spreadsheets/d/1hq-yxoyaxUXWdxJnLeDqGlLXRpeIwzhR/edit?usp=sharing'
+            '&ouid=117628977970091786229&rtpof=true&sd=true" target="_blank" '
+            'style="display:inline-block;padding:8px 18px;background:#fef08a;border:1.5px solid #f59e0b;'
+            'border-radius:8px;color:#92400e;font-weight:700;font-size:13px;text-decoration:none;">'
+            '📥 음료개발 데이터베이스 열기 → 파일 › 다운로드 › Microsoft Excel(.xlsx)</a>',
+            unsafe_allow_html=True,
+        )
+        show_example("""1. 위 버튼으로 데이터베이스를 엑셀(.xlsx)로 내려받기
+2. STEP 3에서 만든 ChatGPT 프로젝트 열기 → 소스(파일) 목록에서 파일 추가 → 내려받은 파일 올리기
+3. 그 프로젝트 안에서 새 대화를 열고 아래 확인 질문 보내기""")
+        st.code("""프로젝트에 등록된 음료개발_데이터베이스의 원료DB에서
+원료 5개의 이름과 Brix·산도·단가를 표로 보여 줘.
+어느 탭에서 읽었는지도 적어 줘.""", language=None)
+        st.caption("⚠️ 숫자를 못 읽거나 엉뚱한 값을 내면, 엑셀에서 **원료DB·음료규격기준·가이드배합비DB** 탭을 "
+                   "각각 `CSV UTF-8(쉼표로 분리)`로 저장해 소스로 추가하세요.")
         st.markdown("""
 | 탭 | 내용 |
 |---|---|
@@ -5850,12 +6119,12 @@ padding:24px;text-align:center;font-size:20px;font-weight:800;">🎯 배합시�
             minutes=5,
         )
         st.markdown("#### 배합비 작성 기준 스크립트 — 복숭아 프로틴 음료 예시")
-        st.info("아래 스크립트 양식을 기준으로 '배합비 작성' 탭에서 나만의 스크립트를 완성하세요.")
+        st.info("아래는 완성된 스크립트 예시입니다. '배합비 작성' 탭에서는 STEP 4 제품기획안을 붙여넣으면 #제품컨셉·#목표 규격이 자동으로 채워집니다.")
         st.code("""#요청배경
 신제품 음료의 배합비 작성
 
 #사용자료 및 출력지침
-Gem에 등록된 지식 파일(ChatGPT에서는 프로젝트에 올린 소스 파일)을 1순위 근거로 삼되,
+이 프로젝트에 소스로 등록한 '음료개발_데이터베이스'를 1순위 근거로 삼되,
 부족한 부분은 네 지식으로 보완한다.
 항목마다 [자료] 또는 [추론] 으로 근거를 구분해 표시하고,
 [추론]으로 채운 값은 왜 그렇게 봤는지 한 줄로 근거를 적는다.
@@ -5868,7 +6137,7 @@ AI 음료개발자 페르소나를 이용해 작성하세요
 프로틴 20g이 함유된 과즙감이 살아있는 복숭아맛 음료
 
 #출력결과
-텍스트 표 형식으로 출력 (파이썬 코드 실행·파일 생성 금지, 요약문으로 대체 금지)
+결과는 텍스트 표 형식으로 출력 (파일 생성·요약문으로 대체 금지. 데이터베이스 값을 읽는 데는 분석 도구를 써도 됨)
 
 아래 열 구성 그대로 마크다운 표로, 원료 행마다 빠짐없이 채워서 출력하세요:
 | No | 구분 | 원료명 | 배합비(%) | Brix 기여도 | 산도 기여도 | 감미도 기여도 | 단가 기여도(원) |
@@ -5881,7 +6150,7 @@ AI 음료개발자 페르소나를 이용해 작성하세요
 #작업가이드
 데이터 결손이나 빈칸이 없어야 함.
 시스템 부하가 걸리면, 나눠서 출력함. 배합 시뮬레이터양식에 맞출것
-AI는 Gem의 지식을 배합비 작성전 학습할 것
+배합비 작성 전 프로젝트 소스의 음료개발_데이터베이스(원료DB·음료규격기준·가이드배합비DB)를 먼저 확인할 것
 위 요청사항과 명령을 모두 수행했을때 3회 검증후 결과물 출력하세요""", language=None)
 
         st.markdown("---")
@@ -5901,108 +6170,216 @@ AI는 Gem의 지식을 배합비 작성전 학습할 것
     with tab_write:
         show_step_guide(
             _S5_STEPS, 2,
-            todo="제품유형·기능성·과일향 조건을 골라 나만의 배합비 스크립트를 완성합니다.",
-            uses="STEP 4 시장분석 보고서에서 도출한 제품 방향",
-            produces="배합비 개발 스크립트와 AI가 작성한 배합비",
+            todo="AI가 만든 제품기획안을 라이브러리에 등록하고, 음료개발 데이터베이스가 소스로 있는 프로젝트에서 불러와 배합표를 출력한 뒤, 배합표도 라이브러리에 등록합니다.",
+            uses="STEP 4 시장분석 보고서를 만든 AI 대화 + 프로젝트 소스의 음료개발 데이터베이스",
+            produces="라이브러리에 등록된 배합표 파일(v1) — 미션1 무결성 검증에 사용",
             minutes=15,
         )
-        def _bev_input(label, key, placeholder="직접 입력"):
-            st.markdown(
-                f'<div style="background:#fefce8;border-radius:6px;padding:4px 10px 2px 10px;'
-                f'border:1.5px solid #fde047;margin-top:4px;">'
-                f'<span style="font-size:11px;color:#854d0e;font-weight:600;">✏️ {label}</span></div>',
-                unsafe_allow_html=True,
-            )
-            return st.text_input(key, key=key, placeholder=placeholder, label_visibility="collapsed")
-
         st.info(
-            "힌트 항목을 선택하거나 노란색 셀에 직접 입력하세요. "
-            "💡 텍스트 입력 후 **Enter**를 눌러 적용하세요.\n\n"
-            "선택 완료 후 **[📥 스크립트 반영하기]** 버튼을 눌러 완성 스크립트를 업데이트하세요."
+            "**흐름:** ① 제품기획안을 파일로 받아 **라이브러리**에 등록 → "
+            "② 음료개발 데이터베이스가 **소스로 등록된 프로젝트**에서 기획안을 불러와 **배합표** 출력 → "
+            "③ 배합표도 파일로 만들어 **라이브러리**에 등록 → 미션1에서 불러와 무결성 검증"
         )
-        st.markdown("**Step 1. 힌트 선택 후 스크립트 초안 생성**")
 
-        st.info("💡 '보고서 작성하기'에서 출력한 제품 보고서의 내용을 활용하여 제품명과 제품의 SPEC을 입력하세요.")
+        if "bev_prodname_pending" in st.session_state:
+            st.session_state["bev_prodname"] = st.session_state.pop("bev_prodname_pending")
+        st.text_input("🏷️ 내 제품명 (파일 이름과 뒤 미션에서 함께 씁니다)", key="bev_prodname",
+                      placeholder="예: 복숭아 프로틴 샷")
+        _pn = (st.session_state.get("bev_prodname") or "").strip() or "제품명"
+        _pn_file = _pn.replace(" ", "")
 
-        # 제품명
-        st.caption("🏷️ 제품명")
-        bev_prodname = _bev_input("제품명 직접입력", "bev_prodname", "예: 복숭아 프로틴 샷 125ml")
+        # ── Step 1. 제품기획안 → 라이브러리 ─────────────
+        st.markdown("**Step 1. 제품기획안을 파일로 받아 라이브러리에 등록하기**")
+        st.caption("STEP 4에서 시장분석 보고서를 만든 ChatGPT 대화에 **이어서** 붙여넣으세요. "
+                   "AI가 만든 파일은 라이브러리에 자동으로 등록됩니다.")
+        st.code(f"""지금까지 대화한 내용으로 최종 제품기획안을 워드 파일(제품기획안_{_pn_file}.docx)로 만들어 줘.
+배합비 개발에 쓸 수 있게 목표 당도·산도·원가도 꼭 넣어 줘.""", language=None)
+        st.caption("✅ 확인: 왼쪽 사이드바 **'라이브러리' → '생성됨'** 에 `제품기획안_...docx` 가 보이면 등록 완료")
 
-        # 제품유형
-        st.caption("🧃 제품유형")
-        # 간소화: 5개 -> 4개 (제외: 발효음료)
-        _PTYPE_OPTS = ["프로틴 음료", "저당 기능성음료", "과즙음료", "에너지음료"]
-        bev_ptype = st.pills("제품유형", _PTYPE_OPTS, key="bev_ptype", label_visibility="collapsed")
-        bev_ptype_c = _bev_input("오픈 항목 직접입력", "bev_ptype_c", "예: 기능성 RTD 음료")
+        # ── Step 2. 프로젝트에서 배합표 출력 ────────────
+        st.markdown("**Step 2. 최종 기획 제품을 프로젝트 소스(음료개발 데이터베이스)에 연결해 배합표 출력하기**")
+        show_example("""1. 음료개발 데이터베이스가 소스로 등록된 ChatGPT 프로젝트 열기 → '새 채팅'
+2. 입력창 '+' → '라이브러리에서 추가' → Step 1의 제품기획안 파일 선택
+3. 아래 스크립트를 붙여넣고 보내기""")
+        bev_main_script = f"""프로젝트 소스의 파일(음료개발 데이터베이스)을 학습하고, 첨부한 제품기획안(라이브러리) 내용과 연결해서
+최적의 배합비를 도출해 줘. (프로젝트 소스와 지식베이스를 모두 검토할 것)
 
-        # 기능성 성분
-        st.caption("💊 기능성 성분 (복수 선택)")
-        # 간소화: 6개 -> 4개 (제외: BCAA 3g, 아연·마그네슘 복합)
-        _FUNC_OPTS = ["프로틴 20g", "비타민C 1000mg", "콜라겐 5000mg", "식이섬유 5g"]
-        bev_func = st.pills("기능성성분", _FUNC_OPTS, selection_mode="multi", key="bev_func", label_visibility="collapsed")
-        bev_func_c = _bev_input("오픈 항목 직접입력", "bev_func_c", "예: 글루타민 2g")
+[배합표 양식]
+| No | 구분 | 원료명 | 배합비(%) | Brix 기여도 | 산도 기여도 | 감미도 기여도 | 단가 기여도(원) |
+- 마지막 행: 정제수 = 100% − 나머지 원료 합계
+- 표 아래: 당도(Bx)·산도(%)·과즙함량(%) 계산값을 음료규격기준 범위와 비교해 ✅충족/⚠️미충족 표시,
+  기획안의 목표 당도·산도·원가와도 비교
+- 값마다 [자료](데이터베이스 근거) 또는 [추론]을 표시
 
-        # 과일/향
-        st.caption("🍑 과일 / 향")
-        # 간소화: 7개 -> 4개 (제외: 사과, 청포도, 딸기)
-        _FRUIT_OPTS = ["복숭아", "오렌지", "포도", "레몬"]
-        bev_fruit = st.pills("과일향", _FRUIT_OPTS, key="bev_fruit", label_visibility="collapsed")
-        bev_fruit_c = _bev_input("오픈 항목 직접입력", "bev_fruit_c", "예: 망고패션")
+결과는 배합표로 보여 주고, 엑셀 파일(배합표_{_pn_file}_v1.xlsx)로도 만들어 줘."""
+        st.code(bev_main_script, language=None)
 
-        # 제품 특성
-        st.caption("✨ 제품 특성 (복수 선택)")
-        # 간소화: 6개 -> 4개 (제외: 부드러운 텍스처, 무색소)
-        _CHAR_OPTS = ["과즙감이 살아있는", "청량감 강한", "저당", "고단백"]
-        bev_char = st.pills("제품특성", _CHAR_OPTS, selection_mode="multi", key="bev_char", label_visibility="collapsed")
-        bev_char_c = _bev_input("오픈 항목 직접입력", "bev_char_c", "예: 투명한 외관")
+        # ── Step 3. 배합표 내려받기 → 캡처 제출 ─────────
+        st.markdown("**Step 3. 배합표를 내려받아 저장하고, 캡처해서 제출하기**")
+        show_example(f"""1. AI 답변의 배합표_{_pn_file}_v1.xlsx 를 눌러 내려받기 (라이브러리에서도 내려받을 수 있습니다)
+2. 내 PC에 저장한 뒤 엑셀로 열어 배합표가 제대로 들어 있는지 확인
+3. 엑셀 화면 캡처 — Windows: Win + Shift + S  /  Mac: Cmd + Ctrl + Shift + 4
+4. 아래 '📋 캡처 붙여넣기' 버튼 누르기 (또는 캡처 파일을 끌어다 놓기) → 제출""")
+        st.caption("엑셀 파일이 만들어지지 않으면 \"이 배합표를 엑셀 파일로 만들어 줘\"라고 다시 요청하세요. "
+                   "저장한 배합표는 미션1 무결성 검증 때 다시 씁니다.")
+        _bev_student = st.session_state.get("student_name", "")
+        _bev_img = _capture_input("bev_cap")
+        _bev_memo = st.text_input("메모 (선택)", key="bev_cap_memo",
+                                  placeholder="예: 당도 8.1Bx로 목표 충족 / 원가 480원으로 목표보다 30원 높음")
+        if not _bev_student:
+            st.warning("제출하려면 먼저 로그인하세요.")
+        if st.button("📤 배합표 캡처 제출", key="bev_cap_submit_btn", type="primary",
+                     disabled=_bev_img is None or not _bev_student):
+            with st.spinner("캡처를 저장하는 중..."):
+                _ok, _err = _submit_capture(_BEV_CAP_TAB, _bev_student, _bev_memo, _prep_image_b64(_bev_img))
+                if _ok:
+                    # 과제별 제출 현황(배합비 탭)에도 제출 기록을 남긴다
+                    _ok, _err = _submit_hw("배합비", _bev_student, bev_main_script, _bev_memo,
+                                           "배합표 캡처 제출 (%s 탭)" % _BEV_CAP_TAB)
+            if _ok:
+                _fetch_captures.clear()
+                _get_hw_count.clear()
+                st.success("✅ %s 님 배합표 캡처 제출 완료! (다시 제출하면 최신 캡처로 바뀝니다)" % _bev_student)
+            else:
+                st.error("제출 실패: %s" % _err)
 
-        # 검증 횟수
-        st.caption("🔁 검증 횟수")
-        _VER_OPTS = ["3회", "5회"]
-        bev_ver = st.pills("검증횟수", _VER_OPTS, key="bev_ver", label_visibility="collapsed")
-
+        # ── 심화: 기획안 요약을 붙여넣어 긴 스크립트로 직접 만들기 ──
         st.markdown("---")
+        with st.expander("🔧 심화 — 기획안 요약을 붙여넣어 배합비 스크립트를 직접 만들기"):
+            st.caption("기획안의 '배합비 개발용 요약'을 붙여넣으면 앱이 항목을 읽어 긴 배합비 스크립트로 바꿔 줍니다. "
+                       "라이브러리를 쓸 수 없거나, 스크립트 구조를 자세히 익히고 싶을 때 쓰세요.")
+            # ── Step 1. 제품기획안 받기 ─────────────────────
+            st.markdown("**심화 ① 훈련된 AI에게 제품기획안 받기 (요약 형식)**")
+            st.caption("STEP 4에서 시장분석 보고서를 만든 ChatGPT 대화에 **이어서** 붙여넣으세요. "
+                       "그동안 학습한 자료를 근거로 기획안을 만듭니다. "
+                       "보고서도 STEP 3 프로젝트 안에서 만들었다면 기획안부터 배합비까지 한 프로젝트에서 이어집니다.")
+            _PLAN_SCRIPT = """지금까지 학습한 시장분석 보고서에서 추천한 신제품 3개 중 1개를 골라
+배합비 개발에 바로 쓸 수 있는 제품기획안을 만들어 줘.
 
-        # 값 조합
-        _bev_prodname = bev_prodname.strip()
-        _bev_ptype  = ", ".join(filter(None, [bev_ptype, bev_ptype_c.strip()])) or "프로틴 음료"
-        _bev_func   = (list(bev_func or []) + ([bev_func_c.strip()] if bev_func_c.strip() else [])) or ["프로틴 20g"]
-        _bev_fruit  = ", ".join(filter(None, [bev_fruit, bev_fruit_c.strip()])) or "복숭아"
-        _bev_char   = (list(bev_char or []) + ([bev_char_c.strip()] if bev_char_c.strip() else [])) or ["과즙감이 살아있는"]
-        _bev_ver    = bev_ver or "3회"
+[기획안 내용]
+- 이 제품을 고른 이유 3줄 (보고서 근거와 함께)
+- 타깃 소비자, 비교할 경쟁 제품 2개
 
-        _concept_lines = []
-        if _bev_prodname:
-            _concept_lines.append(f"제품명: {_bev_prodname}")
-        _concept_lines.append(f"{', '.join(_bev_func)}이 함유된 {', '.join(_bev_char)} {_bev_fruit}맛 {_bev_ptype}")
-        _concept = "\n".join(_concept_lines)
+[마지막에 아래 형식 그대로 '배합비 개발용 요약'을 붙여 줘]
+제품명:
+제품유형:
+용량:
+맛·향:
+기능성 성분과 함량:
+제품 특성:
+목표 당도(Brix):
+목표 산도(%):
+목표 원가(병당):
+빼야 할 것:
 
-        _out_line = (
-            "텍스트 표 형식으로 출력 (파이썬 코드 실행·파일 생성 금지, 요약문으로 대체 금지)\n\n"
-            "아래 열 구성 그대로 마크다운 표로, 원료 행마다 빠짐없이 채워서 출력하세요:\n"
-            "| No | 구분 | 원료명 | 배합비(%) | Brix 기여도 | 산도 기여도 | 감미도 기여도 | 단가 기여도(원) |\n\n"
-            "- 구분: 원재료 / 당류 / 안정제 / 기타자재 / 정제수 중 하나\n"
-            "- 각 행은 원료DB의 실제 Brix·산도·감미도·단가 값에 배합비(%)를 곱해 기여도를 계산할 것 (빈칸·생략 금지)\n"
-            "- 마지막 행에 정제수 = 100% − 원료 배합비 합계를 자동 계산해 추가\n"
-            "- 표 아래에 '시뮬레이션 결과 요약' 표를 별도로 추가: 당도(Bx)·산도(%)·과즙함량(%) 각 계산값을 "
-            "음료규격기준의 최소~최대 범위와 비교해 ✅충족/⚠️미충족으로 표시"
-        )
+- 모르는 값도 비워 두지 말고 값을 넣은 뒤 [추정]이라고 표시해 줘."""
+            st.code(_PLAN_SCRIPT, language=None)
 
-        bev_script = f"""#요청배경
-신제품 음료의 배합비 작성
+            # ── Step 2. 요약 붙여넣기 ──────────────────────
+            st.markdown("**심화 ② '배합비 개발용 요약'을 붙여넣기**")
+            _PLAN_EXAMPLE = """제품명: 복숭아 프로틴 샷
+제품유형: 프로틴 음료
+용량: 250ml
+맛·향: 복숭아
+기능성 성분과 함량: 단백질 20g
+제품 특성: 과즙감이 살아있는, 저당
+목표 당도(Brix): 8.0 [추정]
+목표 산도(%): 0.25 [추정]
+목표 원가(병당): 450원 [추정]
+빼야 할 것: 합성착색료"""
+            if "plan_paste_pending" in st.session_state:
+                st.session_state["plan_paste"] = st.session_state.pop("plan_paste_pending")
+            _pc1, _pc2 = st.columns([3, 1])
+            with _pc2:
+                if st.button("예시 기획안 넣기", key="plan_example_btn", use_container_width=True,
+                             help="STEP 4를 못 마쳤을 때 예시(복숭아 프로틴 음료)로 연습합니다."):
+                    st.session_state["plan_paste_pending"] = _PLAN_EXAMPLE
+                    st.rerun()
+            with _pc1:
+                st.caption("ChatGPT 답변 맨 끝의 '배합비 개발용 요약' 부분만 복사해 붙여넣으세요.")
+            plan_text = st.text_area("배합비 개발용 요약", key="plan_paste", height=250,
+                                     placeholder=_PLAN_EXAMPLE, label_visibility="collapsed")
+
+            # 요약 → 항목 읽기 ("항목: 값" 줄, 마크다운 굵게·글머리표 허용)
+            _PLAN_KEYS = [
+                ("제품명", ["제품명"]),
+                ("제품유형", ["제품유형", "제품 유형", "식품유형"]),
+                ("용량", ["용량"]),
+                ("맛·향", ["맛·향", "맛/향", "맛", "향"]),
+                ("기능성 성분", ["기능성 성분과 함량", "기능성 성분", "기능성"]),
+                ("제품 특성", ["제품 특성", "제품특성", "특성"]),
+                ("목표 당도", ["목표 당도(Brix)", "목표 당도", "당도"]),
+                ("목표 산도", ["목표 산도(%)", "목표 산도", "산도"]),
+                ("목표 원가", ["목표 원가(병당)", "목표 원가", "원가"]),
+                ("빼야 할 것", ["빼야 할 것", "제외", "제외 조건"]),
+            ]
+            _plan = {}
+            for _ln in (plan_text or "").splitlines():
+                _ln = _ln.strip().lstrip("-•* ").replace("**", "")
+                if ":" not in _ln and "：" not in _ln:
+                    continue
+                _k, _v = _ln.replace("：", ":").split(":", 1)
+                _k, _v = _k.strip(), _v.strip()
+                for _name, _aliases in _PLAN_KEYS:
+                    if _name not in _plan and _k in _aliases and _v:
+                        _plan[_name] = _v
+                        break
+
+            if plan_text.strip():
+                _rows = "\n".join(
+                    "| %s | %s | %s |" % (
+                        _name,
+                        _plan.get(_name, "⚠️ 비어 있음 — AI가 추론"),
+                        "#목표 규격" if _name.startswith("목표") else ("#빼야 할 것" if _name == "빼야 할 것" else "#제품컨셉"),
+                    )
+                    for _name, _ in _PLAN_KEYS
+                )
+                st.markdown("**🔄 스크립트로 옮겨지는 내용**\n\n| 항목 | 기획안 값 | 들어갈 곳 |\n|---|---|---|\n" + _rows)
+
+            # ── 기획안 → 배합비 스크립트 ───────────────────
+            if _plan:
+                _concept = "\n".join(
+                    "%s: %s" % (_n, _plan[_n])
+                    for _n in ["제품명", "제품유형", "용량", "맛·향", "기능성 성분", "제품 특성"] if _n in _plan
+                )
+                _targets = "\n".join("- %s: %s" % (_n, _plan[_n]) for _n in ["목표 당도", "목표 산도", "목표 원가"] if _n in _plan)
+                _plan_block = "#제품컨셉 (STEP 4 제품기획안에서 가져옴)\n" + _concept
+                if _targets:
+                    _plan_block += ("\n\n#목표 규격\n" + _targets +
+                                    "\n배합비가 이 목표에 맞는지 시뮬레이션 결과 요약에서 함께 비교할 것")
+                if _plan.get("빼야 할 것"):
+                    _plan_block += "\n\n#빼야 할 것\n" + _plan["빼야 할 것"]
+            elif plan_text.strip():
+                # 형식대로 붙여넣지 않았을 때 — 기획안 전체를 넣고 AI가 직접 읽게 한다
+                _plan_block = ("#제품기획안 (STEP 4에서 받은 원문)\n" + plan_text.strip() +
+                               "\n\n위 기획안에서 제품명·유형·용량·맛·기능성 성분·목표 당도/산도/원가를 먼저 뽑아 정리한 뒤 배합비를 작성할 것")
+            else:
+                _plan_block = "#제품컨셉\n(Step 2에 제품기획안의 '배합비 개발용 요약'을 붙여넣으세요)"
+
+            _out_line = (
+                "결과는 텍스트 표 형식으로 출력 (파일 생성·요약문으로 대체 금지. 데이터베이스 값을 읽는 데는 분석 도구를 써도 됨)\n\n"
+                "아래 열 구성 그대로 마크다운 표로, 원료 행마다 빠짐없이 채워서 출력하세요:\n"
+                "| No | 구분 | 원료명 | 배합비(%) | Brix 기여도 | 산도 기여도 | 감미도 기여도 | 단가 기여도(원) |\n\n"
+                "- 구분: 원재료 / 당류 / 안정제 / 기타자재 / 정제수 중 하나\n"
+                "- 각 행은 원료DB의 실제 Brix·산도·감미도·단가 값에 배합비(%)를 곱해 기여도를 계산할 것 (빈칸·생략 금지)\n"
+                "- 마지막 행에 정제수 = 100% − 원료 배합비 합계를 자동 계산해 추가\n"
+                "- 표 아래에 '시뮬레이션 결과 요약' 표를 별도로 추가: 당도(Bx)·산도(%)·과즙함량(%) 각 계산값을 "
+                "음료규격기준의 최소~최대 범위와 비교해 ✅충족/⚠️미충족으로 표시"
+            )
+
+            bev_script = f"""#요청배경
+STEP 4 시장분석에서 도출한 제품기획안으로 신제품 음료의 배합비 작성
 
 #사용자료 및 출력지침
-Gem에 등록된 지식 파일(ChatGPT에서는 프로젝트에 올린 소스 파일)을 1순위 근거로 삼되,
+이 프로젝트에 소스로 등록한 '음료개발_데이터베이스'를 1순위 근거로 삼되,
 부족한 부분은 네 지식으로 보완한다.
 항목마다 [자료] 또는 [추론] 으로 근거를 구분해 표시하고,
 [추론]으로 채운 값은 왜 그렇게 봤는지 한 줄로 근거를 적는다.
 
 #요청사항
-아래 제품컨셉으로 제안된 제품의 신제품음료 배합비를
-AI 음료개발자 페르소나를 이용해 작성하세요
+아래 제품기획안의 제품을 AI 음료개발자 페르소나로 배합비를 작성하세요
 
-#제품컨셉
-{_concept}
+{_plan_block}
 
 #출력결과
 {_out_line}
@@ -6010,32 +6387,30 @@ AI 음료개발자 페르소나를 이용해 작성하세요
 #작업가이드
 데이터 결손이나 빈칸이 없어야 함.
 시스템 부하가 걸리면, 나눠서 출력함. 배합 시뮬레이터양식에 맞출것
-AI는 Gem의 지식을 배합비 작성전 학습할 것
-위 요청사항과 명령을 모두 수행했을때 {_bev_ver} 검증후 결과물 출력하세요"""
+배합비 작성 전 프로젝트 소스의 음료개발_데이터베이스(원료DB·음료규격기준·가이드배합비DB)를 먼저 확인할 것
+위 요청사항과 명령을 모두 수행했을때 3회 검증후 결과물 출력하세요"""
 
-        # 반영 버튼: 힌트 선택 내용을 완성 스크립트 텍스트 에어리어에 반영
-        if st.button("📥 스크립트 반영하기", key="bev_apply_btn", use_container_width=True, type="primary"):
-            st.session_state["bev_preview"] = bev_script
-            st.rerun()
+            # ── Step 3. 전환 + 확인·복사 ───────────────────
+            st.markdown("**심화 ③ 배합비 스크립트로 전환하기**")
+            if st.button("🔄 스크립트로 전환하기", key="bev_apply_btn", use_container_width=True, type="primary"):
+                st.session_state["bev_preview"] = bev_script
+                if _plan.get("제품명"):
+                    # 뒤 미션 탭들이 제품명을 이어서 쓴다
+                    st.session_state["bev_prodname_pending"] = _plan["제품명"]
+                st.rerun()
 
-        st.markdown("**Step 2. 완성 스크립트 확인 및 복사**")
-        st.caption("스크립트를 직접 수정할 수 있습니다. 수정 후 복사 버튼을 누르세요.")
+            st.caption("전환된 스크립트는 직접 고칠 수 있습니다. 고친 뒤 복사 버튼을 누르세요.")
+            if "bev_preview" not in st.session_state:
+                st.session_state["bev_preview"] = bev_script
+            st.text_area("완성 스크립트", key="bev_preview", height=320, label_visibility="collapsed")
 
-        # 텍스트 에어리어: 처음에만 bev_script로 초기화
-        if "bev_preview" not in st.session_state:
-            st.session_state["bev_preview"] = bev_script
-        st.text_area("완성 스크립트", key="bev_preview", height=320, label_visibility="collapsed")
-
-        # 복사: 텍스트 에어리어(session_state)의 현재 내용을 스냅샷
-        if st.button("📋 완성 스크립트 복사하기", key="bev_copy_btn", use_container_width=True):
-            st.session_state["bev_copy_snapshot"] = st.session_state.get("bev_preview", bev_script)
-            st.session_state["bev_show_copy"] = not st.session_state.get("bev_show_copy", False)
-        if st.session_state.get("bev_show_copy"):
-            _snap = st.session_state.get("bev_copy_snapshot", bev_script)
-            st.code(_snap + _SUBMIT_INSTRUCTION, language=None)
-
-        # 파일링크 불필요: 배합비 스크립트는 텍스트 제출로 충분
-        _hw_ui("배합비", st.session_state.get("bev_preview", bev_script), "bev_hw_submit")
+            # 복사: 텍스트 에어리어(session_state)의 현재 내용을 스냅샷
+            if st.button("📋 완성 스크립트 복사하기", key="bev_copy_btn", use_container_width=True):
+                st.session_state["bev_copy_snapshot"] = st.session_state.get("bev_preview", bev_script)
+                st.session_state["bev_show_copy"] = not st.session_state.get("bev_show_copy", False)
+            if st.session_state.get("bev_show_copy"):
+                _snap = st.session_state.get("bev_copy_snapshot", bev_script)
+                st.code(_snap + _SUBMIT_INSTRUCTION, language=None)
 
     # ── 미션수행 ───────────────────────────────────────
     with tab_m1:
@@ -6172,7 +6547,7 @@ padding:14px 18px;margin:8px 0;">
 원재료명 / 현재단가 / 대체원료 / 대체단가 / 절감액 / 주의사항을 표로 정리해줘.
 
 [주의]
-- 파이썬 코드를 실행하거나 파일을 분석하지 말고, 바로 마크다운 표로 답해줘."""
+- 단가·규격은 프로젝트에 등록된 음료개발_데이터베이스 값을 쓰고, 결과는 파일로 만들지 말고 마크다운 표로 바로 답해줘."""
 
         else:
             st.markdown("""
@@ -6221,7 +6596,7 @@ padding:14px 18px;margin:8px 0;">
 수정 후 전체 배합비 시트 다시 출력해줘.
 
 [주의]
-- 파이썬 코드를 실행하거나 파일을 분석하지 말고, 바로 마크다운 표로 답해줘."""
+- 단가·규격은 프로젝트에 등록된 음료개발_데이터베이스 값을 쓰고, 결과는 파일로 만들지 말고 마크다운 표로 바로 답해줘."""
 
         st.session_state["ms2_script"] = _ms2_default
 
@@ -7505,6 +7880,7 @@ elif section == "🔐 관리자 현황판":
 
         if st.button("🔄 새로고침", key="_dash_refresh", type="secondary"):
             _fetch_dashboard_data.clear()
+            _fetch_captures.clear()
             st.rerun()
 
         try:
@@ -7548,6 +7924,34 @@ elif section == "🔐 관리자 현황판":
                         _acc_cols[_i % 4].markdown(f"`{_i+1}. {_nm}`")
                 else:
                     st.caption("아직 접속자가 없습니다.")
+
+            # ── 사전준비 인증 (프로젝트 소스 캡처) ──
+            st.markdown("---")
+            st.markdown("### ✅ 사전준비 인증 — 프로젝트 소스 캡처")
+            try:
+                import base64 as _b64m
+                _prep_rows = _fetch_captures(_PREP_TAB)
+                _prep_names = [p["name"] for p in _prep_rows]
+                _prep_missing = [n for n in _acc_names if n not in _prep_names]
+                st.markdown("**%d명 제출** / 접속 %d명" % (len(_prep_rows), _total_acc))
+                if _prep_missing:
+                    st.markdown("<span style='color:#ef4444;'><b>미제출:</b> %s</span>"
+                                % ", ".join(_prep_missing), unsafe_allow_html=True)
+                with st.expander("🖼️ 제출한 캡처 보기 (%d장)" % len(_prep_rows), expanded=False):
+                    if not _prep_rows:
+                        st.caption("아직 제출한 사람이 없습니다.")
+                    _pcols = st.columns(3)
+                    for _i, _p in enumerate(_prep_rows):
+                        with _pcols[_i % 3]:
+                            _cap = "%s · %s" % (_p["name"], _p["time"][5:])
+                            try:
+                                st.image(_b64m.b64decode(_p["b64"]), caption=_cap)
+                            except Exception:
+                                st.caption("%s — 이미지를 읽지 못했습니다" % _cap)
+                            if _p["memo"]:
+                                st.caption("📝 " + _p["memo"])
+            except Exception as _pe:
+                st.caption("사전준비 캡처를 불러오지 못했습니다: %s" % str(_pe)[:150])
 
             st.markdown("---")
             st.markdown("### 📋 과제별 제출 현황")
