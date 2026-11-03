@@ -467,6 +467,22 @@ _SUBMIT_INSTRUCTION = (
     "```"
 )
 
+# 연구원 페르소나 전용 — 경력·기술 나열(프로필)이 아니라 '어떻게 판단하고 답하는지'를 요약시킨다
+_PERSONA_SUBMIT_INSTRUCTION = (
+    "\n\n---\n"
+    "[제출용 요약] 답변이 끝나면 아래 형태로 요약을 하나 더 붙여줘.\n"
+    "코드블록으로 감싸야 복사 버튼으로 이 부분만 가져갈 수 있어.\n"
+    "경력·보유기술을 나열하지 말고, 이 사람이 어떻게 판단하고 답하는지를 요약해.\n"
+    "```\n"
+    "[제출답안]\n"
+    "(200~230자, 한 줄 35자 이내로 줄바꿈. 아래 순서로)\n"
+    "- 이름·소속·경력 한 줄\n"
+    "- 판단 순서 ①②③\n"
+    "- 늘 지키는 기준값(숫자 포함)\n"
+    "- 하지 않는 것과 답하는 방식\n"
+    "```"
+)
+
 
 
 @st.cache_resource(show_spinner=False)
@@ -1805,6 +1821,17 @@ def score_persona(fields: dict, defaults: dict) -> tuple:
     else:
         tips.append("💡 확인 질문을 직접 입력하면 AI가 페르소나를 잘 적용했는지 즉시 확인할 수 있어요.")
 
+    # 5. 나만의 판단 기준 (연구원 탭에만 있음) — 있으면 위 점수 70% + 이 칸 30%
+    _judge_keys = ["판단 순서", "내 기준값", "실패에서 얻은 원칙"]
+    if any(k in fields for k in _judge_keys):
+        _filled = [k for k in _judge_keys if len(str(fields.get(k, "")).strip()) >= 5]
+        score = int(score * 0.7) + 10 * len(_filled)
+        if len(_filled) == 3:
+            tips.append("✅ 판단 순서·기준값·원칙을 모두 직접 썼어요! AI가 '나처럼' 판단하고 답하게 됩니다.")
+        else:
+            _empty = ", ".join(k for k in _judge_keys if k not in _filled)
+            tips.append(f"💡 '{_empty}' 칸을 내 경험으로 채워 보세요. 경력·기술보다 이 칸이 AI 답을 더 크게 바꿉니다.")
+
     score = max(0, min(100, score))
 
     if score >= 80:
@@ -1819,7 +1846,8 @@ def score_persona(fields: dict, defaults: dict) -> tuple:
     return score, tips
 
 
-def render_persona_coach(prompt: str, fields: dict, defaults: dict, key: str):
+def render_persona_coach(prompt: str, fields: dict, defaults: dict, key: str,
+                         submit_inst: str = _SUBMIT_INSTRUCTION):
     """페르소나 섹션 전용 — 스크립트 작성 코치 + 이를 적용하기 (API 없이)"""
     st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
     st.markdown("### ✏️ 작성 점검")
@@ -1850,7 +1878,7 @@ def render_persona_coach(prompt: str, fields: dict, defaults: dict, key: str):
             st.markdown(f"- {tip}")
 
     st.markdown("**📋 아래 전체를 복사 → ChatGPT / Gemini 등 AI 대화창에 붙여넣기**")
-    st.code(prompt.strip() + _SUBMIT_INSTRUCTION, language=None)
+    st.code(prompt.strip() + submit_inst, language=None)
 
 
 def score_data_script(fields: dict, defaults: dict) -> tuple:
@@ -2673,7 +2701,8 @@ elif section == "2️⃣ 제품개발 페르소나":
         st.info(
             "💡 **직접 다 쓰지 않아도 됩니다.** 다음 탭 '연구원 페르소나 만들기'에서 본인 분야를 고르면 "
             "위 항목이 그 분야 기준으로 자동 입력됩니다. 자동 입력된 내용을 읽어보고 "
-            "관심사·연구개발 포인트 정도만 본인 경험으로 고쳐도 페르소나로 충분히 작동합니다."
+            "관심사·연구개발 포인트를 본인 경험으로 고치고, **⑧ 판단 기준 세 칸**(판단 순서·내 기준값·"
+            "실패에서 얻은 원칙)만 직접 쓰면 '나처럼 판단하는' 페르소나가 됩니다."
         )
 
         st.markdown("##### STEP 2. 테이블을 복사해 AI 대화창에 붙여넣기")
@@ -2693,15 +2722,22 @@ elif section == "2️⃣ 제품개발 페르소나":
 관심사: 편의점(CVS) 신제품 모니터링, 제로슈거 소재 및 대체 감미료 연구
 품질 및 리스크관리: 가속 실험(35~45°C)으로 유통기한 경과에 따른 품질 변화 선제적 확인
 
+[나만의 판단 기준]
+판단 순서: ① 첫 병과 마지막 병의 맛 차이 ② 당산비 밸런스 ③ 원가
+내 기준값: 40℃ 가속 4주 후에도 관능 점수 차이 0.5점 이내
+실패에서 얻은 원칙: 실험실 맛만 보고 확정했다가 양산 후 맛이 달라짐 → 반드시 공장 살균 조건으로 재평가
+
 [이 대화 전용 역할 지정] 지금부터 음료연구원은 이 페르소나를 적용합니다.
+[답변 규칙] 앞으로 모든 답은 위 판단 순서대로 검토하고, 수치 → 근거 → 리스크 순으로 짧게 답합니다.
+실험 데이터나 근거 없이 "된다"고 단정하지 않고, 확인이 필요한 부분은 어떤 실험으로 확인할지 함께 말합니다.
 
 [출력 형식 — 아래 순서와 번호를 그대로 지켜 작성]
 1. 페르소나 형성 결과  ★가장 중요
    - 위 정보가 페르소나에 어떻게 반영되었는지 항목별로 정리
-   - 이 연구원이 어떤 관점과 판단 기준으로 일하는지 3~5줄로 서술
+   - 이 연구원의 판단 순서·기준값(숫자)·하지 않는 것·답하는 방식을 3~5줄로 서술
 2. 적용 확인 답변
    - 확인 질문: 저당 탄산음료를 최근 유행 플레이버에 적용했을 때, 단맛을 어느 정도가 좋을까
-   - 위 페르소나 입장에서 5줄 이내로 짧게 답변
+   - 위 판단 순서와 답변 규칙에 따라 5줄 이내로 짧게 답변
 
 ※ 1번을 먼저, 가장 충실하게 작성하세요. 2번은 페르소나가 제대로 적용됐는지 점검하는 용도이므로 짧게 답합니다.""")
 
@@ -3011,7 +3047,7 @@ RTD 음료 마케터의 페르소나를 아래의 정보를 적용해서 작성�
     with tab_researcher:
         show_step_guide(
             _S2_STEPS, 1,
-            todo="①~⑧ 빈칸을 직접 채워 나만의 연구원 페르소나를 완성하고 스크립트로 내보냅니다.",
+            todo="①~⑨ 빈칸을 채워 나만의 연구원 페르소나를 완성하고 스크립트로 내보냅니다. ⑧ 판단 기준 세 칸은 꼭 내 경험으로 쓰세요.",
             uses="앞 탭 예시에서 확인한 페르소나 항목 구조",
             produces="연구원 페르소나 스크립트 (AI 대화창 붙여넣기용)",
             minutes=15,
@@ -3143,8 +3179,55 @@ RTD 음료 마케터의 페르소나를 아래의 정보를 적용해서 작성�
         r_rd_display = r_rd_manual.strip() or r_rd_sel
         r_rd_val = r_rd_manual.strip() or _R_RD_MAP.get(r_rd_sel, rp["연구개발 포인트"])
 
-        # ⑧ 확인 질문 (expander)
-        with st.expander("⑧ 페르소나 적용 확인 질문 (선택)"):
+        # ⑧ 나만의 판단 기준 — 프로필이 아니라 '어떻게 판단하는가'를 AI에 심는 칸
+        # 비워 두면 프롬프트에서 AI가 위 정보로 추론하도록 지시한다
+        _R_JUDGE_EX = {
+            "💪 기능성음료 개발연구원": (
+                "① 침전·응집 여부 ② 기능성 함량이 유통기한 끝까지 남는가 ③ 매일 마실 맛인가",
+                "단백질 음료 pH 6.6 이상, 40℃ 가속 4주 후 침전 없음",
+                "원료사 스펙만 믿고 넣었다가 침전 → 원료는 우리 공정 조건에서 반드시 재검증"),
+            "🥤 탄산음료 개발연구원": (
+                "① 탄산감 유지 ② 당산비 밸런스 ③ 원가",
+                "충전 직후 3.0 GV 이상, 3개월 후 가스 손실 10% 이내",
+                "실험실 맛만 보고 확정했다가 충전 후 탄산이 빠짐 → 충전 라인 조건으로 재평가"),
+            "🌱 식물성·과채음료 개발연구원": (
+                "① 층분리·침전 ② 원물 향·색 보존 ③ 클린라벨",
+                "원물 시즌별 Brix 편차 ±1 이내로 블렌딩 보정",
+                "한 시즌 원물로만 확정했다가 다음 시즌 맛이 달라짐 → 2개 산지·시즌 원료로 검증"),
+            "🥛 유제품 개발연구원": (
+                "① 유청 분리·점도 ② 생균수 유지 ③ 산미 밸런스",
+                "농후발효유는 유통기한 끝까지 생균수 1억 CFU/mL 이상",
+                "냉장 조건만 시험했다가 유통 중 온도 이탈로 유청 분리 → 10℃ 이탈 조건도 시험"),
+            "🍪 제과·스낵 개발연구원": (
+                "① 바삭함 유지 ② 유지 산화 ③ 다시 손이 가는 맛",
+                "완제품 수분활성도(Aw) 0.3 이하 유지",
+                "포장 전 식감만 보고 확정했다가 유통 중 눅눅해짐 → 포장재 투습도까지 함께 설계"),
+            "🧊 냉동식품 개발연구원": (
+                "① 해동·조리 후 식감 ② 조리 편의성 ③ 원가",
+                "-18℃ 보관, 냉해동 3회 반복 후에도 식감 유지",
+                "급속동결 조건만 시험했다가 매장 냉동고 온도 변동에 얼음결정이 커짐 → 온도 변동 시험 필수"),
+            "🍱 HMR·간편식 개발연구원": (
+                "① 데운 뒤 맛·식감 ② 조리 시간 ③ 원가",
+                "전자레인지 700W 3분 이내 완성",
+                "레시피 맛만 맞추고 살균 후 맛 변화를 놓침 → 살균 후 맛으로 최종 판단"),
+            "🥗 프레시푸드·샐러드 개발연구원": (
+                "① 위생·미생물 ② 갈변·물러짐 ③ 맛과 구성",
+                "제조부터 판매까지 10℃ 이하 유지",
+                "세척만 믿었다가 유통 이틀 만에 물러짐 → 탈수·포장 조건까지 함께 검증"),
+        }
+        _rj = _R_JUDGE_EX.get(r_theme_sel, _R_JUDGE_EX[_r_default_key])
+        st.markdown('<span class="ml-step">⑧ 나만의 판단 기준 — 내 경험으로 직접 쓰세요 (가장 중요)</span>', unsafe_allow_html=True)
+        st.caption("경력·기술 목록보다 이 세 칸이 AI의 답을 더 크게 바꿉니다. "
+                   "회색 글씨는 예시입니다. 비워 두면 AI가 위 정보로 추론합니다.")
+        r_judge_order = st.text_input("판단 순서 — 시제품을 볼 때 가장 먼저 확인하는 세 가지는?",
+                                      placeholder="예: " + _rj[0], key=f"r_judge_order_{rtk}")
+        r_judge_value = st.text_input("내 기준값 — 내가 늘 지키는 숫자 하나는?",
+                                      placeholder="예: " + _rj[1], key=f"r_judge_value_{rtk}")
+        r_judge_lesson = st.text_input("실패에서 얻은 원칙 — 예전에 실패한 경험에서 생긴 나만의 규칙은?",
+                                       placeholder="예: " + _rj[2], key=f"r_judge_lesson_{rtk}")
+
+        # ⑨ 확인 질문 (expander)
+        with st.expander("⑨ 페르소나 적용 확인 질문 (선택)"):
             r_test_q = st.text_input("확인 질문", rp["확인 질문"], key=f"r_testq_{rtk}", label_visibility="collapsed")
 
         # Mad-lib 완성 문장
@@ -3160,7 +3243,8 @@ RTD 음료 마케터의 페르소나를 아래의 정보를 적용해서 작성�
 저는 <b>{_span_r(r_job_display, '직무 분야')}</b> 전문가로,<br>
 {_span_r(r_career_val, '근무경력')}의 경험을 보유합니다.<br>
 {_span_r(r_interest_val, '관심사')}에 관심이 있으며,<br>
-{_span_r(r_prod_display, '관심 제품')} 개발을 {_span_r(r_rd_display, '연구 방향')}을 핵심으로 담당합니다.
+{_span_r(r_prod_display, '관심 제품')} 개발을 {_span_r(r_rd_display, '연구 방향')}을 핵심으로 담당합니다.<br>
+시제품은 {_span_r(r_judge_order.strip(), '판단 순서')} 순서로 보고, {_span_r(r_judge_value.strip(), '내 기준값')}을 지킵니다.
 </div>
 """, unsafe_allow_html=True)
 
@@ -3180,15 +3264,22 @@ RTD 음료 마케터의 페르소나를 아래의 정보를 적용해서 작성�
 연구개발 포인트: {r_rd_val}
 품질 및 리스크관리: {r_quality_val}
 
+[나만의 판단 기준]
+판단 순서: {r_judge_order.strip() or '미입력 — 위 정보로 이 연구원이 시제품을 볼 때 확인하는 순서 3가지를 추론'}
+내 기준값: {r_judge_value.strip() or '미입력 — 이 분야에서 이 연구원이 늘 지키는 기준값을 숫자로 제시'}
+실패에서 얻은 원칙: {r_judge_lesson.strip() or '미입력 — 이 연구원이 실패 경험에서 얻었을 법한 원칙 1가지를 제시'}
+
 [이 대화 전용 역할 지정] 지금부터 이 연구원은 위 페르소나를 적용합니다.
+[답변 규칙] 앞으로 모든 답은 위 판단 순서대로 검토하고, 수치 → 근거 → 리스크 순으로 짧게 답합니다.
+실험 데이터나 근거 없이 "된다"고 단정하지 않고, 확인이 필요한 부분은 어떤 실험으로 확인할지 함께 말합니다.
 
 [출력 형식 — 아래 순서와 번호를 그대로 지켜 작성]
 1. 페르소나 형성 결과  ★가장 중요
    - 위 정보가 페르소나에 어떻게 반영되었는지 항목별로 정리
-   - 이 연구원이 어떤 관점과 판단 기준으로 일하는지 3~5줄로 서술
+   - 이 연구원의 판단 순서·기준값(숫자)·하지 않는 것·답하는 방식을 3~5줄로 서술
 2. 적용 확인 답변
    - 확인 질문: {r_test_q}
-   - 위 페르소나 입장에서 5줄 이내로 짧게 답변
+   - 위 판단 순서와 답변 규칙에 따라 5줄 이내로 짧게 답변
 
 ※ 1번을 먼저, 가장 충실하게 작성하세요. 2번은 페르소나가 제대로 적용됐는지 점검하는 용도이므로 짧게 답합니다."""
 
@@ -3196,13 +3287,16 @@ RTD 음료 마케터의 페르소나를 아래의 정보를 적용해서 작성�
             "직무": r_job_val, "근무경력": r_career_val,
             "관심사": r_interest_val, "관심 제품 유형": r_prod_val,
             "연구개발 포인트": r_rd_val, "확인 질문": r_test_q,
+            "판단 순서": r_judge_order, "내 기준값": r_judge_value,
+            "실패에서 얻은 원칙": r_judge_lesson,
         }
         r_defaults = {
             "직무": rp["직무"], "근무경력": rp["근무경력"],
             "관심사": rp.get("관심사", ""), "관심 제품 유형": rp["관심 제품 유형"],
             "연구개발 포인트": rp["연구개발 포인트"], "확인 질문": rp["확인 질문"],
         }
-        render_persona_coach(prompt_r, r_fields, r_defaults, f"r_{rtk}")
+        render_persona_coach(prompt_r, r_fields, r_defaults, f"r_{rtk}",
+                             submit_inst=_PERSONA_SUBMIT_INSTRUCTION)
         # 파일링크 불필요: 연구자 페르소나 스크립트는 텍스트 제출로 충분
         _hw_ui("연구원_페르소나", prompt_r, "r_hw_submit")
 
