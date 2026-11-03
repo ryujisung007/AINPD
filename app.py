@@ -856,6 +856,357 @@ def _fetch_dashboard_data():
     return acc_data, summary_data
 
 
+# ── 강사 전용 제출물 보기 (관리자 현황판 > 📽 제출물 보기) ──────────
+# (화면 표시 이름, 시트 탭) — 수업 진행 순서
+_HW_VIEW_TABS = [
+    ("2️⃣ 연구원 페르소나",      "연구원_페르소나"),
+    ("2️⃣ 마케터 페르소나",      "마케터_페르소나"),
+    ("3️⃣ 데이터 수집 스크립트", "데이터수집스크립트"),
+    ("3️⃣ 데이터 학습지시",      "데이터학습지시"),
+    ("4️⃣ 온라인 시장분석",      "온라인시장분석"),
+    ("4️⃣ 수집 코드 실행",       "수집코드실행"),
+    ("4️⃣ 식품전문정보분석",     "식품전문정보분석"),
+    ("4️⃣ 시장조사 학습",        "시장조사학습"),
+    ("4️⃣ 보고서 작성",          "보고서작성"),
+    ("4️⃣ AI 간 대화전환",       "AI전환"),
+    ("5️⃣ 배합비 작성",          "배합비"),
+    ("5️⃣ 배합비 미션",          "배합비_미션"),
+    ("5️⃣ 배합비 프로세스",      "배합비_프로세스"),
+    ("6️⃣ 디지털트윈랩",         "디지털트윈랩"),
+    ("6️⃣ 가상소비자모델",       "가상소비자모델"),
+    ("6️⃣ 관능검사",             "관능검사"),
+    ("7️⃣ 프로젝트 정리",        "프로젝트정리"),
+]
+_HW_VIEW_LABEL = {t: l for l, t in _HW_VIEW_TABS}
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def _sheet_tab_titles():
+    """시트에 실제로 있는 탭 이름 (10분 캐시) — 없는 탭을 일괄 조회에 넣으면 전체가 실패한다"""
+    sh = _get_gs_client().open_by_key(_GS_SHEET_ID)
+    return [ws.title for ws in sh.worksheets()]
+
+
+@st.cache_data(ttl=20, show_spinner=False)
+def _fetch_all_submissions():
+    """모든 과제 탭 제출 행을 API 1회로 읽기 (20초 캐시)
+    반환: [{tab, label, time, name, script, answer, link, extra}, ...] 제출시간 오름차순"""
+    titles = set(_sheet_tab_titles())
+    tabs = [t for _, t in _HW_VIEW_TABS if t in titles]
+    if not tabs:
+        return []
+    sh = _get_gs_client().open_by_key(_GS_SHEET_ID)
+    res = sh.values_batch_get(["'%s'!A2:F1000" % t for t in tabs])
+    items = []
+    for tab, vr in zip(tabs, res.get("valueRanges", [])):
+        for row in vr.get("values", []):
+            row = list(row) + [""] * (6 - len(row))
+            if not row[1].strip():
+                continue
+            answer = row[3].strip()
+            if answer.startswith("[제출답안]"):
+                answer = answer[len("[제출답안]"):].lstrip(" :：\n")
+            items.append({
+                "tab": tab, "label": _HW_VIEW_LABEL.get(tab, tab),
+                "time": row[0].strip(), "name": row[1].strip(),
+                "script": row[2].strip(), "answer": answer,
+                "link": row[4].strip(), "extra": row[5].strip(),
+            })
+    items.sort(key=lambda x: x["time"])
+    return items
+
+
+def _drive_file_id(url: str) -> str:
+    """구글 드라이브/문서/시트 링크에서 파일 ID 추출 (없으면 빈 문자열)"""
+    import re
+    if "google.com" not in url:
+        return ""
+    m = re.search(r"/d/([A-Za-z0-9_-]{20,})", url) or re.search(r"[?&]id=([A-Za-z0-9_-]{20,})", url)
+    return m.group(1) if m else ""
+
+
+def _drive_thumb_url(url: str, width: int = 1000) -> str:
+    fid = _drive_file_id(url)
+    return "https://drive.google.com/thumbnail?id=%s&sz=w%d" % (fid, width) if fid else ""
+
+
+def _download_drive_thumb(url: str):
+    """PPT에 넣을 미리보기 이미지 바이트 (링크 공개 파일만 가능, 실패 시 None)"""
+    import urllib.request
+    thumb = _drive_thumb_url(url, 1200)
+    if not thumb:
+        return None
+    try:
+        req = urllib.request.Request(thumb, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=6) as r:
+            if not r.headers.get("Content-Type", "").startswith("image/"):
+                return None
+            return r.read()
+    except Exception:
+        return None
+
+
+def _is_recent(ts: str, minutes: int = 5) -> bool:
+    from datetime import datetime, timezone, timedelta
+    try:
+        t = datetime.strptime(ts, "%Y-%m-%d %H:%M")
+    except Exception:
+        return False
+    now = (datetime.now(timezone.utc) + timedelta(hours=9)).replace(tzinfo=None)
+    return timedelta(0) <= now - t <= timedelta(minutes=minutes)
+
+
+def _build_submissions_pptx(title: str, items: list) -> bytes:
+    """제출물 → 학생 1명당 슬라이드 1장 pptx (강사 배포·보관용 스냅샷)"""
+    import io
+    from datetime import datetime, timezone, timedelta
+    from pptx import Presentation
+    from pptx.util import Inches, Pt
+    from pptx.dml.color import RGBColor
+    from pptx.enum.shapes import MSO_SHAPE
+    from pptx.enum.text import MSO_ANCHOR
+
+    prs = Presentation()
+    prs.slide_width, prs.slide_height = Inches(13.333), Inches(7.5)
+    blank = prs.slide_layouts[6]
+
+    def _rect(s, x, y, w, h, color):
+        shp = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(x), Inches(y), Inches(w), Inches(h))
+        shp.fill.solid()
+        shp.fill.fore_color.rgb = RGBColor.from_string(color)
+        shp.line.fill.background()
+        return shp
+
+    def _text(s, x, y, w, h, text, size, color="1E293B", bold=False, link=""):
+        tb = s.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
+        tf = tb.text_frame
+        tf.word_wrap = True
+        tf.vertical_anchor = MSO_ANCHOR.TOP
+        for i, line in enumerate(text.split("\n")):
+            p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
+            r = p.add_run()
+            r.text = line
+            f = r.font
+            f.size, f.bold, f.name = Pt(size), bold, "맑은 고딕"
+            f.color.rgb = RGBColor.from_string(color)
+            # 한글을 어절 단위로 줄바꿈시키는 언어 태그
+            rPr = r._r.get_or_add_rPr()
+            rPr.set("lang", "ko-KR")
+            rPr.set("altLang", "en-US")
+            if link:
+                r.hyperlink.address = link
+        return tb
+
+    now = (datetime.now(timezone.utc) + timedelta(hours=9)).strftime("%Y-%m-%d %H:%M")
+    s = prs.slides.add_slide(blank)
+    _rect(s, 0, 0, 13.333, 7.5, "0E3B43")
+    _text(s, 0.8, 2.4, 11.7, 1.2, title, 40, "FFFFFF", True)
+    _text(s, 0.8, 3.7, 11.7, 0.8, "제출 %d건 · %s 기준" % (len(items), now), 20, "CFE3DF")
+
+    for n, it in enumerate(items, 1):
+        s = prs.slides.add_slide(blank)
+        _rect(s, 0, 0, 13.333, 1.15, "0E3B43")
+        _text(s, 0.5, 0.18, 9.0, 0.5, it["label"], 16, "CFE3DF")
+        _text(s, 0.5, 0.5, 9.0, 0.6, it["name"], 26, "FFFFFF", True)
+        _text(s, 9.6, 0.5, 3.3, 0.5, "%s  ·  %d/%d" % (it["time"], n, len(items)), 13, "CFE3DF")
+
+        body = it["answer"] or it["script"] or "(내용 없음)"
+        body_lbl = "제출답안" if it["answer"] else "작성 스크립트"
+        img = _download_drive_thumb(it["link"]) if it["link"] else None
+        bw = 7.2 if img else 12.3
+        size = 22 if len(body) <= 150 else 18 if len(body) <= 300 else 15
+        _text(s, 0.5, 1.4, bw, 0.4, body_lbl, 13, "E07A1F", True)
+        _text(s, 0.5, 1.8, bw, 4.9, body, size)
+
+        if img:
+            # 미리보기 영역 배경판 + 그 안에 비율 유지해서 가운데 정렬
+            _rect(s, 8.0, 1.45, 4.85, 5.2, "EAF4F1")
+            pic = s.shapes.add_picture(io.BytesIO(img), Inches(8.1), Inches(1.55), height=Inches(5.0))
+            if pic.width > Inches(4.65):
+                ratio = Inches(4.65) / pic.width
+                pic.width, pic.height = Inches(4.65), int(pic.height * ratio)
+            pic.left = Inches(8.0) + (Inches(4.85) - pic.width) // 2
+            pic.top = Inches(1.45) + (Inches(5.2) - pic.height) // 2
+        if it["link"]:
+            _text(s, 0.5, 6.85, 12.3, 0.4, "🔗 " + it["link"], 12, "1F7A8C", link=it["link"])
+        notes = "작성 스크립트:\n" + it["script"]
+        if it["extra"]:
+            notes += "\n\n추가 제출:\n" + it["extra"]
+        s.notes_slide.notes_text_frame.text = notes
+
+    buf = io.BytesIO()
+    prs.save(buf)
+    return buf.getvalue()
+
+
+def _submission_slide_html(it: dict, pos: str) -> str:
+    """제출물 1건을 16:9 슬라이드 모양 HTML로"""
+    import html as _h
+    e = lambda t: _h.escape(t or "")
+    body = it["answer"] or it["script"] or "(내용 없음)"
+    body_lbl = "제출답안" if it["answer"] else "작성 스크립트"
+    fsize = 26 if len(body) <= 150 else 21 if len(body) <= 300 else 17
+    new = ("<span style='background:#C2413B;color:#fff;border-radius:99px;padding:3px 12px;"
+           "font-size:15px;font-weight:800;margin-left:12px;'>NEW</span>") if _is_recent(it["time"]) else ""
+    thumb = _drive_thumb_url(it["link"])
+    media = ""
+    if thumb:
+        media = (
+            "<div style='flex:0 0 40%;display:flex;flex-direction:column;gap:8px;'>"
+            "<div style='flex:1;border-radius:12px;background:#EAF4F1 url(\"" + thumb + "\") "
+            "center/contain no-repeat;border:1px solid #cfe3df;'></div>"
+            "<a href='" + e(it["link"]) + "' target='_blank' style='font-size:14px;color:#1F7A8C;'>"
+            "🔗 원본 파일 열기</a></div>")
+    elif it["link"]:
+        media = ("<div style='position:absolute;left:36px;bottom:20px;font-size:15px;'>"
+                 "<a href='" + e(it["link"]) + "' target='_blank' style='color:#1F7A8C;'>🔗 "
+                 + e(it["link"][:90]) + "</a></div>")
+    return (
+        # 화면 높이를 넘지 않도록 폭을 78vh 기준으로 제한 (F11 전체 화면에서도 한눈에)
+        "<div style='position:relative;aspect-ratio:16/9;width:min(100%,calc(78vh*16/9));"
+        "margin:0 auto;background:#fff;"
+        "border-radius:16px;overflow:hidden;box-shadow:0 6px 24px rgba(0,0,0,.12);"
+        "font-family:\"Malgun Gothic\",sans-serif;display:flex;flex-direction:column;'>"
+        "<div style='background:#0E3B43;color:#fff;padding:18px 36px;display:flex;"
+        "justify-content:space-between;align-items:flex-end;'>"
+        "<div><div style='font-size:16px;color:#CFE3DF;'>" + e(it["label"]) + "</div>"
+        "<div style='font-size:36px;font-weight:800;'>" + e(it["name"]) + new + "</div></div>"
+        "<div style='font-size:16px;color:#CFE3DF;text-align:right;'>" + e(it["time"])
+        + "<br><b style='font-size:20px;color:#F28C28;'>" + pos + "</b></div></div>"
+        "<div style='flex:1;display:flex;gap:28px;padding:22px 36px 50px 36px;min-height:0;'>"
+        "<div style='flex:1;min-width:0;display:flex;flex-direction:column;'>"
+        "<div style='font-size:15px;font-weight:800;color:#E07A1F;margin-bottom:8px;'>" + body_lbl + "</div>"
+        "<div style='flex:1;overflow:auto;white-space:pre-wrap;word-break:keep-all;line-height:1.55;"
+        "font-size:" + str(fsize) + "px;color:#1E293B;'>" + e(body) + "</div></div>"
+        + media + "</div></div>"
+    )
+
+
+def _submission_card_html(it: dict) -> str:
+    """모아보기용 작은 카드"""
+    import html as _h
+    e = lambda t: _h.escape(t or "")
+    body = it["answer"] or it["script"] or "(내용 없음)"
+    short = body[:160] + ("…" if len(body) > 160 else "")
+    thumb = _drive_thumb_url(it["link"], 500)
+    img = ("<div style='height:120px;margin-top:10px;border-radius:8px;background:#EAF4F1 url(\""
+           + thumb + "\") center/contain no-repeat;'></div>") if thumb else ""
+    border = "#C2413B" if _is_recent(it["time"]) else "#e2e8f0"
+    return (
+        "<div style='background:#fff;border:2px solid " + border + ";border-radius:12px;"
+        "padding:14px 16px;height:100%;font-family:\"Malgun Gothic\",sans-serif;'>"
+        "<div style='display:flex;justify-content:space-between;align-items:baseline;'>"
+        "<b style='font-size:18px;color:#0E3B43;'>" + e(it["name"]) + "</b>"
+        "<span style='font-size:12px;color:#94a3b8;'>" + e(it["time"][5:]) + "</span></div>"
+        "<div style='font-size:12px;color:#1F7A8C;margin-bottom:6px;'>" + e(it["label"]) + "</div>"
+        "<div style='font-size:14px;color:#334155;white-space:pre-wrap;word-break:keep-all;"
+        "line-height:1.5;'>" + e(short) + "</div>" + img + "</div>"
+    )
+
+
+_LATEST_FEED = "⏱ 방금 들어온 제출 (전체 과제)"
+
+
+def _render_submission_viewer():
+    """관리자 현황판 > 📽 제출물 보기 — 학생 제출 내용을 슬라이드처럼 띄운다 (강사 전용)"""
+    # 슬라이드가 한 화면에 들어오도록 큰 배너 대신 한 줄 제목
+    st.markdown("### 📽 제출물 보기")
+
+    _c1, _c2, _c3 = st.columns([2.2, 1.3, 1])
+    with _c1:
+        _sel = st.selectbox("과제", [_LATEST_FEED] + [l for l, _ in _HW_VIEW_TABS], key="_pv_task")
+    with _c2:
+        _mode = st.radio("보기", ["한 장씩", "모아보기"], horizontal=True, key="_pv_mode")
+    with _c3:
+        _auto = st.toggle("자동 갱신", value=True, key="_pv_auto",
+                          help="30초마다 시트를 다시 읽습니다.")
+    st.caption("💡 크게 보려면 사이드바를 접고 F11(전체 화면)을 누르세요. "
+               "드라이브 링크 미리보기는 '링크가 있는 모든 사용자' 공유 파일만 보입니다.")
+
+    def _pick(all_items):
+        if _sel == _LATEST_FEED:
+            return list(reversed(all_items))[:40]          # 최신이 맨 앞
+        _tab = dict((l, t) for l, t in _HW_VIEW_TABS)[_sel]
+        return [x for x in all_items if x["tab"] == _tab]  # 제출 순서
+
+    @st.fragment(run_every="30s" if _auto else None)
+    def _live():
+        try:
+            _items = _pick(_fetch_all_submissions())
+        except Exception as _fe:
+            st.error("제출물 조회 오류: %s" % str(_fe)[:200])
+            return
+        if not _items:
+            st.info("아직 제출이 없습니다.")
+            return
+
+        if _mode == "모아보기":
+            st.markdown("**%d건**" % len(_items))
+            _cols = st.columns(3)
+            for _i, _it in enumerate(_items):
+                with _cols[_i % 3]:
+                    st.html(_submission_card_html(_it))
+            return
+
+        _key = "_pv_idx_" + _sel
+        _follow = st.session_state.get("_pv_follow", False)
+        if _follow:
+            # 새 제출이 들어오면 그 학생으로 자동 이동
+            _newest = 0 if _sel == _LATEST_FEED else len(_items) - 1
+            st.session_state[_key] = _newest
+        _idx = min(st.session_state.get(_key, 0), len(_items) - 1)
+
+        _n1, _n2, _n3, _n4 = st.columns([1, 1, 2.4, 1.6])
+        if _n1.button("◀ 이전", key="_pv_prev", use_container_width=True, disabled=_idx <= 0):
+            _idx -= 1
+        if _n2.button("다음 ▶", key="_pv_next", use_container_width=True,
+                      disabled=_idx >= len(_items) - 1):
+            _idx += 1
+        _names = ["%d. %s" % (i + 1, x["name"]) + ("" if _sel != _LATEST_FEED else " · " + x["label"])
+                  for i, x in enumerate(_items)]
+        _jump = _n3.selectbox("학생", _names, index=_idx, key="_pv_jump_%s_%d" % (_sel, _idx),
+                              label_visibility="collapsed")
+        _idx = _names.index(_jump)
+        _n4.toggle("새 제출 따라가기", key="_pv_follow")
+        st.session_state[_key] = _idx
+
+        _it = _items[_idx]
+        st.html(_submission_slide_html(_it, "%d / %d" % (_idx + 1, len(_items))))
+        with st.expander("작성 스크립트 전체 보기"):
+            st.text(_it["script"] or "(없음)")
+            if _it["extra"]:
+                st.markdown("**추가 제출**")
+                st.text(_it["extra"])
+
+    _live()
+
+    st.markdown("---")
+    with st.expander("📥 PPT로 내려받기 (지금 시점 스냅샷)", expanded=False):
+        st.caption("선택한 과제의 제출물을 학생 1명당 슬라이드 1장으로 만듭니다. "
+                   "작성 스크립트는 슬라이드 노트에 들어갑니다.")
+        if st.button("📄 PPT 만들기", key="_pv_make_ppt"):
+            try:
+                with st.spinner("슬라이드 만드는 중... (드라이브 미리보기 이미지를 받는 데 시간이 걸릴 수 있습니다)"):
+                    _fetch_all_submissions.clear()
+                    _snap = _pick(_fetch_all_submissions())
+                    if _sel == _LATEST_FEED:
+                        _snap = list(reversed(_snap))
+                    st.session_state["_pv_ppt"] = (_sel, _build_submissions_pptx(
+                        "제출물 모음 — " + _sel.replace("⏱ ", ""), _snap))
+            except ImportError:
+                st.error("python-pptx가 설치되어 있지 않습니다. `pip install python-pptx` 후 다시 시도하세요.")
+            except Exception as _pe:
+                st.error("PPT 생성 실패: %s" % str(_pe)[:200])
+        _ppt = st.session_state.get("_pv_ppt")
+        if _ppt and _ppt[0] == _sel:
+            from datetime import datetime, timezone, timedelta
+            _stamp = (datetime.now(timezone.utc) + timedelta(hours=9)).strftime("%m%d_%H%M")
+            st.download_button("⬇️ 내려받기 (.pptx)", data=_ppt[1],
+                               file_name="제출물_%s_%s.pptx" % (_sel.split(" ", 1)[-1].replace(" ", ""), _stamp),
+                               mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                               key="_pv_ppt_dl")
+
+
 def _record_login(student: str):
     """접속자현황 탭에 학생 접속 기록 (신규면 추가, 기존이면 최근접속시간 업데이트)
     IP는 학생에게 노출되지 않는 별도 숨김 탭(_접속IP기록)에만 매 접속마다 누적 기록한다."""
@@ -7050,6 +7401,12 @@ elif section == "🔐 관리자 현황판":
                 else:
                     st.error("코드가 올바르지 않습니다.")
     else:
+        _adm_view = st.radio("보기 선택", ["📊 제출 현황", "📽 제출물 보기"], horizontal=True,
+                             key="_adm_view", label_visibility="collapsed")
+        if _adm_view == "📽 제출물 보기":
+            _render_submission_viewer()
+            st.stop()
+
         show_banner("관리자 현황판", "전체 접속자 · 과제별 제출 현황 · 진행률", "🔐")
 
         if st.button("🔄 새로고침", key="_dash_refresh", type="secondary"):
