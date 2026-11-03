@@ -930,15 +930,28 @@ def _fetch_all_submissions():
                 "script": row[2].strip(), "answer": answer,
                 "link": row[4].strip(), "extra": row[5].strip(),
             })
-    # 배합비 작성은 캡처로 제출하므로, 같은 학생의 배합표 캡처를 붙인다
+    items.sort(key=lambda x: x["time"])
+    return items
+
+
+def _cap_tab(sheet_tab: str) -> str:
+    """과제 탭에 딸린 캡처 탭 이름 (예: 배합비 → 배합비_캡처)"""
+    return sheet_tab + "_캡처"
+
+
+def _attach_captures(items: list) -> list:
+    """같은 학생이 과제와 함께 올린 캡처를 붙인다 — 화면에 보이는 과제의 캡처 탭만 읽는다"""
     try:
-        _caps = {c["name"]: c["b64"] for c in _fetch_captures(_BEV_CAP_TAB)}
-        for it in items:
-            if it["tab"] == "배합비" and it["name"] in _caps:
-                it["img"] = _caps[it["name"]]
+        titles = set(_sheet_tab_titles())
+        for tab in {it["tab"] for it in items}:
+            if _cap_tab(tab) not in titles:
+                continue
+            caps = {c["name"]: c["b64"] for c in _fetch_captures(_cap_tab(tab))}
+            for it in items:
+                if it["tab"] == tab and it["name"] in caps:
+                    it["img"] = caps[it["name"]]
     except Exception:
         pass
-    items.sort(key=lambda x: x["time"])
     return items
 
 
@@ -1173,7 +1186,7 @@ def _render_submission_viewer():
     def _load():
         if _sel == _PREP_VIEW:
             return _prep_items()
-        return _pick(_fetch_all_submissions())
+        return _attach_captures(_pick(_fetch_all_submissions()))
 
     def _pick(all_items):
         if _sel == _LATEST_FEED:
@@ -1313,7 +1326,7 @@ def _record_login(student: str):
 # 그래서 캡처를 작은 JPEG로 줄여 base64 글자로 바꾼 뒤 여러 칸에 나눠 저장한다.
 # (서비스 계정은 자체 드라이브 저장 용량이 없어 드라이브 업로드는 쓰지 않는다)
 _PREP_TAB = "사전준비확인"
-_BEV_CAP_TAB = "배합비_캡처"   # 배합비 작성 Step 3 — 내려받은 배합표 캡처
+_BEV_CAP_TAB = "배합비_캡처"   # 배합비 작성 Step 3 — 내려받은 배합표 캡처 (= _cap_tab("배합비"))
 _PREP_CHUNK = 45000      # 한 칸에 넣을 글자 수 (시트 한도 50,000자)
 _PREP_MAX_CHUNKS = 6     # 이미지 한 장에 쓸 최대 칸 수
 
@@ -1352,6 +1365,7 @@ def _submit_capture(tab: str, student: str, memo: str, b64: str):
             ws = sh.add_worksheet(title=tab, rows=200, cols=ncols)
             ws.append_row(["제출시간", "학생이름", "메모", "이미지 칸 수"]
                           + ["이미지%d" % (i + 1) for i in range(_PREP_MAX_CHUNKS)])
+            _sheet_tab_titles.clear()   # 새 캡처 탭이 제출물 보기에 바로 잡히도록
         ts = (datetime.now(timezone.utc) + timedelta(hours=9)).strftime("%Y-%m-%d %H:%M")
         row = ([ts, student, memo.strip(), str(len(chunks))] + chunks
                + [""] * (_PREP_MAX_CHUNKS - len(chunks)))
@@ -1406,6 +1420,22 @@ def _capture_input(key: str):
     if img is not None:
         st.image(img, caption="제출할 캡처", width=520)
     return img
+
+
+def _capture_field(key: str):
+    """과제 제출란에 붙는 '결과 화면 캡처 (선택)' 칸"""
+    st.markdown("**📷 결과 화면 캡처** (선택)")
+    st.caption("결과 화면을 Win+Shift+S로 캡처 → '📋 캡처 붙여넣기' (또는 파일 끌어다 놓기)")
+    return _capture_input(key)
+
+
+def _save_hw_capture(sheet_tab: str, student: str, img):
+    """과제 글이 저장된 뒤 캡처를 〈탭〉_캡처에 저장 (캡처가 없으면 그대로 성공)"""
+    if img is None:
+        return True, ""
+    ok, err = _submit_capture(_cap_tab(sheet_tab), student, "", _prep_image_b64(img))
+    _fetch_captures.clear()
+    return ok, ("" if ok else "글은 제출됐지만 캡처 저장에 실패했습니다 — " + err)
 
 
 def _submit_report_nb(student: str, nb_script: str):
@@ -1483,8 +1513,8 @@ def _submit_process_hw(student: str, step1: str, step2: str, step3: str):
 
 def _hw_ui(sheet_tab: str, content: str, btn_key: str,
            with_file: bool = False, show_ai_field: bool = True, ai_label: str = "AI 생성결과",
-           title: str = "과제 제출", guide_type: str = "gemini"):
-    """과제 제출 UI — 각 세션 하단에 공통으로 삽입"""
+           title: str = "과제 제출", guide_type: str = "gemini", with_capture: bool = True):
+    """과제 제출 UI — 각 세션 하단에 공통으로 삽입 (결과 화면 캡처는 〈탭〉_캡처 시트에 따로 저장)"""
     st.markdown("---")
     student = st.session_state.get("student_name", "")
     if not student:
@@ -1527,12 +1557,16 @@ def _hw_ui(sheet_tab: str, content: str, btn_key: str,
             else:
                 _show_share_guide()
 
+    cap_img = _capture_field(f"{btn_key}_cap") if with_capture else None
+
     col_btn, col_status = st.columns([1, 2])
     with col_btn:
         clicked = st.button("📤 과제 제출하기", key=btn_key,
                             type="primary", use_container_width=True)
     if clicked:
         ok, err = _submit_hw(sheet_tab, student, content, ai_result, file_link)
+        if ok:
+            ok, err = _save_hw_capture(sheet_tab, student, cap_img)
         st.session_state[f"{btn_key}_done"] = ok
         st.session_state[f"{btn_key}_err"] = err if not ok else ""
         if ok:
@@ -5075,6 +5109,7 @@ font-size:15px;color:#1d4ed8;font-weight:700;line-height:1.7;">🎯 학습자 �
                 placeholder="ChatGPT가 만들어준 NotebookLM 지침 스크립트를 여기에 붙여넣으세요.",
                 label_visibility="collapsed",
             )
+            _nb_img = _capture_field("report_nb_cap")
             _col_nb_btn, _col_nb_status = st.columns([1, 2])
             with _col_nb_btn:
                 _nb_clicked = st.button("📤 슬라이드 스크립트 제출", key="report_nb_submit",
@@ -5082,6 +5117,8 @@ font-size:15px;color:#1d4ed8;font-weight:700;line-height:1.7;">🎯 학습자 �
             if _nb_clicked:
                 if _nb_input.strip():
                     _ok, _err = _submit_report_nb(_s2_student, _nb_input.strip())
+                    if _ok:   # 보고서작성_캡처 — Step 1 캡처가 있으면 최신(슬라이드) 캡처로 바뀜
+                        _ok, _err = _save_hw_capture("보고서작성", _s2_student, _nb_img)
                     st.session_state["report_nb_done"] = _ok
                     st.session_state["report_nb_err"] = _err if not _ok else ""
                 else:
@@ -6911,6 +6948,7 @@ padding:14px 20px;margin-bottom:16px;">
             )
             if not _all_filled:
                 st.info("STEP 1·2·3 결과를 모두 입력해야 제출할 수 있습니다.")
+            _proc_img = _capture_field("proc_cap")
             _proc_btn = st.button(
                 "📤 개발 프로세스 제출",
                 key="proc_hw_submit",
@@ -6925,6 +6963,8 @@ padding:14px 20px;margin-bottom:16px;">
                     st.session_state.get("proc_step2", ""),
                     st.session_state.get("proc_step3", ""),
                 )
+                if _ok:
+                    _ok, _err = _save_hw_capture("배합비_프로세스", _proc_student, _proc_img)
                 if _ok:
                     st.success(f"✅ **{_proc_student}** 님 제출 완료!")
                 else:
