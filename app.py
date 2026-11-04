@@ -2807,7 +2807,18 @@ if section == "🏠 교육 개요":
     show_example("""1. ChatGPT 프로젝트 열기 → 위쪽 '소스' 탭
 2. 위 노란색 필수 자료가 소스 목록에 올라가 있는지 확인
 3. 화면 캡처 — Windows: Win + Shift + S  /  Mac: Cmd + Ctrl + Shift + 4
-4. 아래 '📋 캡처 붙여넣기' 버튼 누르기 (또는 캡처 파일을 끌어다 놓기) → 제출""")
+4. 아래 '📋 캡처 붙여넣기' → '📋 클립보드에서 붙여넣기' (또는 캡처 파일을 끌어다 놓기) → 제출""")
+    with st.expander("📁 캡처한 파일은 어디에 저장되나요? (붙여넣기가 안 될 때 파일로 올리기)"):
+        st.markdown(
+            "- **Windows 11** — Win + Shift + S로 찍으면 클립보드에 복사되고, **사진 › 스크린샷** 폴더에도 자동 저장됩니다.\n"
+            "  - 바로 열기: 파일 탐색기 주소창에 `%USERPROFILE%\\Pictures\\Screenshots` 붙여넣고 Enter\n"
+            "  - OneDrive를 쓰는 PC는 **OneDrive › 사진 › 스크린샷** 에 있을 수 있습니다\n"
+            "- **Windows 10 / 폴더에 없을 때** — 캡처 직후 화면 오른쪽 아래 뜨는 알림을 눌러 💾 저장, "
+            "또는 **Win + PrtSc** (화면 전체가 위 스크린샷 폴더에 바로 저장)\n"
+            "- **Mac** — Cmd + Ctrl + Shift + 4는 클립보드로만 복사됩니다. 파일로 남기려면 "
+            "**Cmd + Shift + 4** (바탕화면에 저장)\n\n"
+            "저장된 파일은 아래 오른쪽 칸에 끌어다 놓거나, 칸을 눌러 골라 올리면 됩니다."
+        )
 
     _prep_student = st.session_state.get("student_name", "")
     _prep_img = _capture_input("prep")
@@ -6147,7 +6158,7 @@ elif section == "3️⃣ 제품개발용 데이터":
 elif section == "5️⃣ 배합비 개발":
     show_banner(
         "배합비 개발",
-        "ChatGPT 프로젝트 소스로 등록한 음료개발 데이터베이스를 근거로, 제품기획안을 배합비로 바꿉니다.",
+        "훈련한 AI와 음료개발 데이터베이스를 근거로, 제품기획안을 배합비로 바꿉니다.",
         "5 / 7"
     )
     show_mission([
