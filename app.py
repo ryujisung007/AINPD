@@ -1555,17 +1555,30 @@ def _fetch_captures(tab: str):
 
 
 def _capture_input(key: str):
-    """캡처 받기 — '📋 캡처 붙여넣기' 버튼 또는 파일 올리기. 미리보기까지 보여 주고 PIL 이미지를 돌려준다"""
-    img = None
+    """캡처 받기 — '📋 캡처 붙여넣기' 또는 파일 올리기. 미리보기까지 보여 주고 PIL 이미지를 돌려준다
+
+    붙여넣기 버튼(streamlit_paste_button)은 외부 컴포넌트라 화면이 다시 그려질 때마다 새로 불러온다.
+    페이지마다(숨은 탭 포함) 늘 띄워 두면 스크립트 생성처럼 다시 그려질 때 수업 중 네트워크에서
+    'having trouble loading the component' 경고가 뜬다. 그래서 학생이 누를 때만 띄우고,
+    받은 캡처는 세션에 보관해 그 뒤로는 컴포넌트 없이 보여 준다."""
+    img_key, open_key = key + "_img", key + "_open"
+    img = st.session_state.get(img_key)
     c1, c2 = st.columns([1, 2])
     with c1:
-        try:
-            from streamlit_paste_button import paste_image_button
-            pasted = paste_image_button("📋 캡처 붙여넣기", key=key + "_paste")
-            if pasted is not None and pasted.image_data is not None:
-                img = pasted.image_data
-        except ImportError:
-            st.caption("붙여넣기 버튼을 쓸 수 없는 환경입니다. 오른쪽에 파일을 올려 주세요.")
+        if st.session_state.get(open_key):
+            try:
+                from streamlit_paste_button import paste_image_button
+                pasted = paste_image_button("📋 클립보드에서 붙여넣기", key=key + "_paste")
+                if pasted is not None and pasted.image_data is not None:
+                    img = st.session_state[img_key] = pasted.image_data
+                    st.session_state[open_key] = False
+                    st.rerun()   # 컴포넌트를 내리고 보관한 캡처로 다시 그린다
+            except ImportError:
+                st.caption("붙여넣기 버튼을 쓸 수 없는 환경입니다. 오른쪽에 파일을 올려 주세요.")
+            st.caption("버튼이 안 뜨면 오른쪽 칸에 캡처 파일을 끌어다 놓으세요.")
+        elif st.button("📋 캡처 붙여넣기", key=key + "_openbtn"):
+            st.session_state[open_key] = True
+            st.rerun()
     with c2:
         f = st.file_uploader("또는 캡처 파일 올리기", type=["png", "jpg", "jpeg", "webp"],
                              key=key + "_file", label_visibility="collapsed")
@@ -1574,6 +1587,9 @@ def _capture_input(key: str):
             img = Image.open(f)
     if img is not None:
         st.image(img, caption="제출할 캡처", width=520)
+        if st.session_state.get(img_key) is not None and st.button("🗑 붙여넣은 캡처 지우기", key=key + "_clear"):
+            st.session_state.pop(img_key, None)
+            st.rerun()
     return img
 
 
