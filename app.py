@@ -366,7 +366,6 @@ _AI_DUMMY_FIELDS = {
     "bev_mission_hw_submit_ai": "미션 수행 결과 시트에 대한 AI 코멘트 2~3문장",
     "proc_step1": "시니어 연구원 페르소나 훈련 결과 코멘트 2~3문장",
     "proc_step2": "시니어 연구원 코칭 결과 코멘트 2~3문장",
-    "proc_step3": "마케팅 분석 및 최종안 결과 코멘트 2~3문장",
     "twin_result": "디지털 트윈랩 실험 결과 메모 (3줄 이내)",
     "con_hw_submit_ai": "가상 소비자 모델 제작 결과 — 패널 프로필 및 평가기준 설명 4~5문장",
     "sen_result": "관능검사 결과 메모 (3줄 이내, 점수 포함)",
@@ -939,17 +938,39 @@ def _cap_tab(sheet_tab: str) -> str:
     return sheet_tab + "_캡처"
 
 
+@st.cache_data(ttl=60, show_spinner=False)
+def _fetch_full_scripts(tab: str) -> dict:
+    """작성 스크립트 원문 {학생이름: 원문} — 셀에는 500자까지만 있고 전체는 셀 메모에 있다 (1분 캐시)"""
+    sh = _get_gs_client().open_by_key(_GS_SHEET_ID)
+    meta = sh.fetch_sheet_metadata(params={
+        "ranges": "'%s'!B2:C1000" % tab,
+        "fields": "sheets.data.rowData.values(formattedValue,note)"})
+    out = {}
+    for row in meta["sheets"][0].get("data", [{}])[0].get("rowData", []):
+        v = row.get("values", [])
+        if len(v) < 2 or not v[0].get("formattedValue"):
+            continue
+        out[v[0]["formattedValue"].strip()] = v[1].get("note") or v[1].get("formattedValue", "")
+    return out
+
+
 def _attach_captures(items: list) -> list:
-    """같은 학생이 과제와 함께 올린 캡처를 붙인다 — 화면에 보이는 과제의 캡처 탭만 읽는다"""
+    """보이는 과제의 캡처와 작성 스크립트 원문을 붙인다 — 화면에 보이는 과제 탭만 읽는다"""
     try:
         titles = set(_sheet_tab_titles())
         for tab in {it["tab"] for it in items}:
-            if _cap_tab(tab) not in titles:
-                continue
-            caps = {c["name"]: c["b64"] for c in _fetch_captures(_cap_tab(tab))}
-            for it in items:
-                if it["tab"] == tab and it["name"] in caps:
-                    it["img"] = caps[it["name"]]
+            if _cap_tab(tab) in titles:
+                caps = {c["name"]: c["b64"] for c in _fetch_captures(_cap_tab(tab))}
+                for it in items:
+                    if it["tab"] == tab and it["name"] in caps:
+                        it["img"] = caps[it["name"]]
+            try:
+                full = _fetch_full_scripts(tab)
+                for it in items:
+                    if it["tab"] == tab and full.get(it["name"]):
+                        it["script"] = full[it["name"]].strip()
+            except Exception:
+                pass
     except Exception:
         pass
     return items
@@ -1086,18 +1107,35 @@ def _submission_slide_html(it: dict, pos: str) -> str:
     """제출물 1건을 16:9 슬라이드 모양 HTML로"""
     import html as _h
     e = lambda t: _h.escape(t or "")
-    body = it["answer"] or it["script"] or "(내용 없음)"
-    body_lbl = it.get("body_lbl") or ("제출답안" if it["answer"] else "작성 스크립트")
+    script = it["script"]
+    body = it["answer"] or ("" if script else "(내용 없음)")
+    body_lbl = it.get("body_lbl") or ("메모" if it.get("img") else "제출답안")
     fsize = 26 if len(body) <= 150 else 21 if len(body) <= 300 else 17
     new = ("<span style='background:#C2413B;color:#fff;border-radius:99px;padding:3px 12px;"
            "font-size:15px;font-weight:800;margin-left:12px;'>NEW</span>") if _is_recent(it["time"]) else ""
     thumb = _drive_thumb_url(it["link"])
+    # 작성 스크립트 — 학생이 AI에게 준 지시. 답변(또는 캡처)과 나란히 놓고 비교하며 피드백한다
+    script_box = ""
+    if script:
+        script_box = (
+            "<div style='flex:1 1 0;min-height:0;display:flex;flex-direction:column;'>"
+            "<div style='font-size:14px;font-weight:800;color:#64748B;margin-bottom:6px;'>작성 스크립트</div>"
+            "<div style='flex:1;overflow:auto;white-space:pre-wrap;word-break:keep-all;line-height:1.45;"
+            "font-size:13px;color:#475569;background:#F1F5F9;border-radius:10px;padding:10px 12px;'>"
+            + e(script) + "</div></div>")
     media = ""
     if it.get("img"):
-        # 사전준비 캡처 — 시트에 저장한 이미지를 그대로 보여 준다
-        media = ("<div style='flex:0 0 58%;position:relative;min-height:0;'>"
-                 "<img src='data:image/jpeg;base64," + it["img"] + "' style='position:absolute;inset:0;"
-                 "width:100%;height:100%;object-fit:contain;'></div>")
+        # 캡처 제출 — 시트에 저장한 이미지를 크게, 왼쪽에 메모와 작성 스크립트
+        memo = ("<div style='flex:0 0 auto;margin-bottom:12px;'>"
+                "<div style='font-size:15px;font-weight:800;color:#E07A1F;margin-bottom:6px;'>" + body_lbl + "</div>"
+                "<div style='font-size:20px;color:#1E293B;white-space:pre-wrap;word-break:keep-all;'>"
+                + e(it["answer"] or "(메모 없음)") + "</div></div>")
+        return _slide_frame(it, pos, new,
+                            "<div style='flex:0 0 38%;min-width:0;display:flex;flex-direction:column;'>"
+                            + memo + script_box + "</div>"
+                            "<div style='flex:1;position:relative;min-height:0;'>"
+                            "<img src='data:image/jpeg;base64," + it["img"] + "' style='position:absolute;inset:0;"
+                            "width:100%;height:100%;object-fit:contain;'></div>")
     elif thumb:
         media = (
             "<div style='flex:0 0 40%;display:flex;flex-direction:column;gap:8px;'>"
@@ -1105,10 +1143,23 @@ def _submission_slide_html(it: dict, pos: str) -> str:
             "center/contain no-repeat;border:1px solid #cfe3df;'></div>"
             "<a href='" + e(it["link"]) + "' target='_blank' style='font-size:14px;color:#1F7A8C;'>"
             "🔗 원본 파일 열기</a></div>")
-    elif it["link"]:
+    elif it["link"] and it["link"].startswith("http"):
         media = ("<div style='position:absolute;left:36px;bottom:20px;font-size:15px;'>"
                  "<a href='" + e(it["link"]) + "' target='_blank' style='color:#1F7A8C;'>🔗 "
                  + e(it["link"][:90]) + "</a></div>")
+    left = ("<div style='flex:0 0 36%;min-width:0;display:flex;flex-direction:column;'>" + script_box + "</div>"
+            if script_box else "")
+    answer = ("<div style='flex:1;min-width:0;display:flex;flex-direction:column;'>"
+              "<div style='font-size:15px;font-weight:800;color:#E07A1F;margin-bottom:8px;'>" + body_lbl + "</div>"
+              "<div style='flex:1;overflow:auto;white-space:pre-wrap;word-break:keep-all;line-height:1.55;"
+              "font-size:" + str(fsize) + "px;color:#1E293B;'>" + e(body or "(답변 없음)") + "</div></div>")
+    return _slide_frame(it, pos, new, left + answer + media)
+
+
+def _slide_frame(it: dict, pos: str, new: str, inner: str) -> str:
+    """슬라이드 겉모양 — 머리띠(과제·이름·시간) + 본문"""
+    import html as _h
+    e = lambda t: _h.escape(t or "")
     return (
         # 화면 높이를 넘지 않도록 폭을 78vh 기준으로 제한 (F11 전체 화면에서도 한눈에)
         "<div style='position:relative;aspect-ratio:16/9;width:min(100%,calc(78vh*16/9));"
@@ -1121,21 +1172,22 @@ def _submission_slide_html(it: dict, pos: str) -> str:
         "<div style='font-size:36px;font-weight:800;'>" + e(it["name"]) + new + "</div></div>"
         "<div style='font-size:16px;color:#CFE3DF;text-align:right;'>" + e(it["time"])
         + "<br><b style='font-size:20px;color:#F28C28;'>" + pos + "</b></div></div>"
-        "<div style='flex:1;display:flex;gap:28px;padding:22px 36px 50px 36px;min-height:0;'>"
-        "<div style='flex:1;min-width:0;display:flex;flex-direction:column;'>"
-        "<div style='font-size:15px;font-weight:800;color:#E07A1F;margin-bottom:8px;'>" + body_lbl + "</div>"
-        "<div style='flex:1;overflow:auto;white-space:pre-wrap;word-break:keep-all;line-height:1.55;"
-        "font-size:" + str(fsize) + "px;color:#1E293B;'>" + e(body) + "</div></div>"
-        + media + "</div></div>"
+        "<div style='flex:1;display:flex;gap:24px;padding:22px 36px 50px 36px;min-height:0;'>"
+        + inner + "</div></div>"
     )
 
 
 def _submission_card_html(it: dict) -> str:
-    """모아보기용 작은 카드"""
+    """모아보기용 작은 카드 — 작성 스크립트 첫 줄 + 제출답안(또는 메모·캡처)"""
     import html as _h
     e = lambda t: _h.escape(t or "")
-    body = it["answer"] or it["script"] or "(내용 없음)"
+    body = it["answer"] or ("" if it["script"] else "(내용 없음)")
     short = body[:160] + ("…" if len(body) > 160 else "")
+    first = next((ln.strip() for ln in (it["script"] or "").splitlines()
+                  if ln.strip() and not ln.strip().startswith("⚠️")), "")
+    script_line = ("<div style='font-size:12px;color:#64748B;background:#F1F5F9;border-radius:6px;"
+                   "padding:4px 8px;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'>"
+                   "📝 " + e(first[:80]) + "</div>") if first else ""
     thumb = _drive_thumb_url(it["link"], 500)
     img = ("<div style='height:120px;margin-top:10px;border-radius:8px;background:#EAF4F1 url(\""
            + thumb + "\") center/contain no-repeat;'></div>") if thumb else ""
@@ -1150,6 +1202,7 @@ def _submission_card_html(it: dict) -> str:
         "<b style='font-size:18px;color:#0E3B43;'>" + e(it["name"]) + "</b>"
         "<span style='font-size:12px;color:#94a3b8;'>" + e(it["time"][5:]) + "</span></div>"
         "<div style='font-size:12px;color:#1F7A8C;margin-bottom:6px;'>" + e(it["label"]) + "</div>"
+        + script_line +
         "<div style='font-size:14px;color:#334155;white-space:pre-wrap;word-break:keep-all;"
         "line-height:1.5;'>" + e(short) + "</div>" + img + "</div>"
     )
@@ -1423,8 +1476,8 @@ def _capture_input(key: str):
 
 
 def _capture_field(key: str):
-    """과제 제출란에 붙는 '결과 화면 캡처 (선택)' 칸"""
-    st.markdown("**📷 결과 화면 캡처** (선택)")
+    """캡처로 제출하는 과제의 '결과 화면 캡처 (필수)' 칸"""
+    st.markdown("**📷 결과 화면 캡처** (필수)")
     st.caption("결과 화면을 Win+Shift+S로 캡처 → '📋 캡처 붙여넣기' (또는 파일 끌어다 놓기)")
     return _capture_input(key)
 
@@ -1477,8 +1530,9 @@ def _submit_report_nb(student: str, nb_script: str):
         return False, str(e)
 
 
-def _submit_process_hw(student: str, step1: str, step2: str, step3: str):
-    """배합비_프로세스: STEP1·2·3 결과를 C·D·E 열에 각각 분리 저장"""
+def _submit_process_hw(student: str, step1, step2, step3):
+    """배합비_프로세스: STEP1·2·3 결과를 C·D·E 열에 각각 분리 저장
+    None으로 준 STEP은 이미 제출된 값을 그대로 둔다 (STEP 3 마케터 인터뷰는 탭 삭제로 비워 둠)"""
     from datetime import datetime, timezone, timedelta
     try:
         gc = _get_gs_client()
@@ -1502,29 +1556,77 @@ def _submit_process_hw(student: str, step1: str, step2: str, step3: str):
             if len(row) >= 2 and row[1] == student:
                 existing_idx = i + 1
                 break
+        new_vals = [step1, step2, step3]
         if existing_idx:
-            ws.update([[step1, step2, step3]], f"C{existing_idx}:E{existing_idx}")
+            old = (all_rows[existing_idx - 1] + [""] * 5)[2:5]
+            vals = [o if v is None else v for v, o in zip(new_vals, old)]
+            ws.update([[timestamp, student] + vals], f"A{existing_idx}:E{existing_idx}")
         else:
-            ws.append_row([timestamp, student, step1, step2, step3])
+            ws.append_row([timestamp, student] + ["" if v is None else v for v in new_vals])
         return True, ""
     except Exception as e:
         return False, str(e)
 
 
+def _proc_submit_ui(btn_key: str, label: str, steps: list):
+    """배합비 개발 프로세스 제출 버튼 — steps: [(STEP 번호 1~3, 이름), ...] 이 탭에서 채운 STEP만 저장"""
+    st.markdown("---")
+    st.markdown("##### 📤 과제 제출")
+    student = st.session_state.get("student_name", "")
+    if not student:
+        st.warning("과제를 제출하려면 먼저 로그인하세요.")
+        return
+    names = " · ".join("STEP %d %s" % (n, nm) for n, nm in steps)
+    st.caption("%s 결과를 저장합니다. 각 STEP은 구글시트 별도 열에 들어가고, 다시 제출하면 최신 내용으로 바뀝니다." % names)
+    c1, c2 = st.columns([1, 2])
+    # disabled를 걸면 붙여넣은 직후 첫 클릭이 무시되므로 항상 누를 수 있게 두고, 누른 뒤 빈칸을 알려 준다
+    if c1.button("📤 " + label, key=btn_key, type="primary", use_container_width=True):
+        empty = ["STEP %d" % n for n, _ in steps if not st.session_state.get("proc_step%d" % n, "").strip()]
+        if empty:
+            st.session_state[btn_key + "_msg"] = ("warn", "%s 결과를 먼저 붙여넣어 주세요." % ", ".join(empty))
+        else:
+            vals = [None, None, None]
+            for n, _ in steps:
+                vals[n - 1] = st.session_state.get("proc_step%d" % n, "").strip()
+            ok, err = _submit_process_hw(student, *vals)
+            st.session_state[btn_key + "_msg"] = (("ok", "✅ **%s** 님 제출 완료!" % student) if ok
+                                                  else ("err", "제출 실패: " + err))
+            if ok:
+                _get_hw_count.clear()
+    kind, msg = st.session_state.get(btn_key + "_msg", ("", ""))
+    with c2:
+        if kind == "ok":
+            st.success(msg)
+        elif kind == "warn":
+            st.warning(msg)
+        elif kind == "err":
+            st.error(msg)
+
+
 def _hw_ui(sheet_tab: str, content: str, btn_key: str,
-           with_file: bool = False, show_ai_field: bool = True, ai_label: str = "AI 생성결과",
-           title: str = "과제 제출", guide_type: str = "gemini", with_capture: bool = True):
-    """과제 제출 UI — 각 세션 하단에 공통으로 삽입 (결과 화면 캡처는 〈탭〉_캡처 시트에 따로 저장)"""
+           show_ai_field: bool = True, ai_label: str = "AI 생성결과",
+           title: str = "과제 제출", by_capture: bool = False,
+           memo_label: str = "한 줄 메모"):
+    """과제 제출 UI — 각 세션 하단에 공통으로 삽입
+    과제마다 제출 방식을 하나로 정한다 (작성 스크립트 content는 두 방식 모두 자동 저장)
+      by_capture=False : AI 생성답변 붙여넣기
+      by_capture=True  : 결과 화면 캡처(필수) + 한 줄 메모 — 캡처는 〈탭〉_캡처 시트에 저장"""
     st.markdown("---")
     student = st.session_state.get("student_name", "")
     if not student:
         st.warning("과제를 제출하려면 먼저 로그인하세요.")
         return
     st.markdown(f"##### 📤 {title}")
-    st.caption("동일인이 재제출하면 최종 내용으로 덮어씁니다.")
+    st.caption("📷 결과 화면을 캡처해서 제출하는 과제입니다. 동일인이 재제출하면 최종 내용으로 덮어씁니다."
+               if by_capture else "동일인이 재제출하면 최종 내용으로 덮어씁니다.")
 
     ai_result = ""
-    if show_ai_field:
+    cap_img = None
+    if by_capture:
+        cap_img = _capture_field(f"{btn_key}_cap")
+        ai_result = st.text_input(memo_label + " (선택)", key=f"{btn_key}_memo",
+                                  placeholder="강사에게 남길 말이나 결과 한 줄 요약")
+    elif show_ai_field:
         st.markdown(
             '<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;'
             'padding:10px 16px 6px 16px;margin-top:8px;margin-bottom:4px;">'
@@ -1538,33 +1640,15 @@ def _hw_ui(sheet_tab: str, content: str, btn_key: str,
             height=360, label_visibility="collapsed",
         )
 
-    file_link = ""
-    if with_file:
-        file_link = st.text_input(
-            "파일 링크 (구글드라이브 공유 링크, 선택)",
-            placeholder="https://drive.google.com/...",
-            key=f"{btn_key}_file",
-        )
-        guide_btn_label = ("🔗 GPT생성 파일 공유방법 보기(누름)" if guide_type == "gpt"
-                           else "🔗 공유 설정 방법 보기")
-        if st.button(guide_btn_label, key=f"{btn_key}_guide_btn",
-                     use_container_width=False):
-            st.session_state[f"{btn_key}_show_guide"] = not st.session_state.get(
-                f"{btn_key}_show_guide", False)
-        if st.session_state.get(f"{btn_key}_show_guide"):
-            if guide_type == "gpt":
-                _show_share_guide_gpt()
-            else:
-                _show_share_guide()
-
-    cap_img = _capture_field(f"{btn_key}_cap") if with_capture else None
-
     col_btn, col_status = st.columns([1, 2])
     with col_btn:
         clicked = st.button("📤 과제 제출하기", key=btn_key,
                             type="primary", use_container_width=True)
-    if clicked:
-        ok, err = _submit_hw(sheet_tab, student, content, ai_result, file_link)
+    if clicked and by_capture and cap_img is None:
+        st.session_state[f"{btn_key}_done"] = False
+        st.session_state[f"{btn_key}_err"] = "캡처를 먼저 붙여넣어 주세요."
+    elif clicked:
+        ok, err = _submit_hw(sheet_tab, student, content, ai_result)
         if ok:
             ok, err = _save_hw_capture(sheet_tab, student, cap_img)
         st.session_state[f"{btn_key}_done"] = ok
@@ -1580,67 +1664,6 @@ def _hw_ui(sheet_tab: str, content: str, btn_key: str,
     count = _get_hw_count(sheet_tab)
     if count >= 0:
         st.caption(f"👥 현재 제출 인원: **{count}명**")
-
-
-def _show_share_guide():
-    st.markdown("""
-<div style="background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:10px;
-padding:16px 20px;margin:8px 0;">
-<div style="font-size:14px;font-weight:700;color:#0f172a;margin-bottom:12px;">
-📤 제미나이 → 구글 시트 내보내기 &amp; 공유 링크 설정</div>
-
-<div style="font-size:13px;color:#334155;line-height:1.9;">
-
-<b style="color:#0f172a;">① 제미나이에서 구글 시트로 내보내기</b><br>
-&nbsp;&nbsp;• 제미나이 대화창에서 배합비(또는 결과 표) 생성 후<br>
-&nbsp;&nbsp;• 표 아래 <b>점 세 개(⋮)</b> 클릭<br>
-&nbsp;&nbsp;• <b>"Google Sheet로 내보내기"</b> 선택<br>
-&nbsp;&nbsp;• 구글 드라이브에 자동으로 저장됩니다<br><br>
-
-<b style="color:#0f172a;">② 공유 링크 설정 (누구나 볼 수 있게)</b><br>
-&nbsp;&nbsp;• 저장된 구글 시트 파일 열기<br>
-&nbsp;&nbsp;• 우측 상단 <span style="background:#e2e8f0;border-radius:4px;padding:1px 6px;font-size:12px;font-weight:600;">공유</span> 버튼 클릭<br>
-&nbsp;&nbsp;• "일반 액세스" 항목 → <b>변경</b> 클릭<br>
-&nbsp;&nbsp;• <b>"링크가 있는 모든 사용자"</b> 선택 → 역할: <b>뷰어</b><br>
-&nbsp;&nbsp;• <span style="background:#e2e8f0;border-radius:4px;padding:1px 6px;font-size:12px;font-weight:600;">완료</span> 클릭<br><br>
-
-<b style="color:#0f172a;">③ 링크 복사 후 과제 제출란에 붙여넣기</b><br>
-&nbsp;&nbsp;• 공유 팝업 하단 <b>"링크 복사"</b> 클릭<br>
-&nbsp;&nbsp;• 복사된 링크를 아래 <b>파일 링크</b> 입력칸에 붙여넣기
-
-</div></div>""", unsafe_allow_html=True)
-
-
-def _show_share_guide_gpt():
-    st.markdown("""
-<div style="background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:10px;
-padding:16px 20px;margin:8px 0;">
-<div style="font-size:14px;font-weight:700;color:#0f172a;margin-bottom:12px;">
-📤 ChatGPT 생성 결과 파일로 공유하기</div>
-
-<div style="font-size:13px;color:#334155;line-height:1.9;">
-
-<b style="color:#0f172a;">① ChatGPT 결과 파일 링크 확인</b><br>
-&nbsp;&nbsp;• 생성 결과가 <b>파일 링크(파일 카드)</b>로 뜨는 경우<br>
-&nbsp;&nbsp;&nbsp;&nbsp;→ 해당 파일 링크를 우클릭 → <b>"링크 주소 복사"</b> 클릭 → 아래 ④번으로 이동<br>
-&nbsp;&nbsp;• 파일을 <b>다운로드</b>한 경우<br>
-&nbsp;&nbsp;&nbsp;&nbsp;→ 다운로드한 파일을 아래 <b>②번(구글 드라이브 업로드)</b>부터 진행<br><br>
-
-<b style="color:#0f172a;">② 구글 드라이브에 업로드</b><br>
-&nbsp;&nbsp;• (다운로드한 파일이 있는 경우) 구글 드라이브 접속 → <b>새로 만들기</b> → <b>파일 업로드</b><br>
-&nbsp;&nbsp;• 다운로드한 파일 선택 후 업로드<br><br>
-
-<b style="color:#0f172a;">③ 공유 링크 설정 (누구나 볼 수 있게)</b><br>
-&nbsp;&nbsp;• 업로드한 파일 우클릭 → <span style="background:#e2e8f0;border-radius:4px;padding:1px 6px;font-size:12px;font-weight:600;">공유</span> 클릭<br>
-&nbsp;&nbsp;• "일반 액세스" 항목 → <b>변경</b> 클릭<br>
-&nbsp;&nbsp;• <b>"링크가 있는 모든 사용자"</b> 선택 → 역할: <b>뷰어</b><br>
-&nbsp;&nbsp;• <span style="background:#e2e8f0;border-radius:4px;padding:1px 6px;font-size:12px;font-weight:600;">완료</span> 클릭<br><br>
-
-<b style="color:#0f172a;">④ 링크 복사 후 과제 제출란에 붙여넣기</b><br>
-&nbsp;&nbsp;• 공유 팝업 하단 <b>"링크 복사"</b> 클릭<br>
-&nbsp;&nbsp;• 복사된 링크를 아래 <b>파일 링크</b> 입력칸에 붙여넣기
-
-</div></div>""", unsafe_allow_html=True)
 
 
 def _build_twin_html(rows: list, product_name: str) -> str:
@@ -1787,6 +1810,32 @@ def _build_twin_html(rows: list, product_name: str) -> str:
         + js_data + js_logic
         + "</body>\n</html>"
     )
+
+
+def _clean_ai_html(raw: str) -> str:
+    """AI 답변을 통째로 붙여넣어도 실행되게 HTML만 꺼낸다
+    - ```html 코드블록 표시, 앞뒤 설명 문장 제거
+    - HTML·CSS·JS가 코드블록 여러 개로 나뉘어 있으면 하나로 합침"""
+    import re
+    t = (raw or "").strip()
+    blocks = re.findall(r"```[ \t]*([A-Za-z]*)[^\n]*\n(.*?)```", t, re.S)
+    lo = t.lower()
+    start = min([i for i in (lo.find("<!doctype"), lo.find("<html")) if i >= 0], default=-1)
+    end = lo.rfind("</html>")
+    if start >= 0 and end > start:
+        page = t[start:end + 7]                      # 문서 전체가 한 덩어리로 있음
+    else:
+        htmls = [b for lang, b in blocks if lang.lower() in ("html", "") and "<" in b]
+        page = max(htmls, key=len).strip() if htmls else t.replace("```html", "").replace("```", "").strip()
+    css = "\n".join(b for lang, b in blocks if lang.lower() == "css")
+    js = "\n".join(b for lang, b in blocks if lang.lower() in ("js", "javascript"))
+    if css and css.strip()[:40] not in page:
+        page = (page.replace("</head>", "<style>\n%s\n</style>\n</head>" % css, 1)
+                if "</head>" in page else "<style>\n%s\n</style>\n" % css + page)
+    if js and js.strip()[:40] not in page:
+        page = (page.replace("</body>", "<script>\n%s\n</script>\n</body>" % js, 1)
+                if "</body>" in page else page + "\n<script>\n%s\n</script>" % js)
+    return page
 
 
 _TWIN_EXAMPLE_DRIVE_ID = "1yFdiScZ0yV-e0_-cIWw6EPKYGSJsAKdb"
@@ -2645,65 +2694,6 @@ if section == "🏠 교육 개요":
         else:
             st.error("제출 실패: %s" % _err)
 
-    st.markdown("---")
-    st.markdown("### 📤 공유 링크 만들기 가이드")
-    st.caption("과제 제출 시 파일 링크가 필요한 경우 아래 가이드를 참고하세요.")
-
-    with st.expander("📊 구글 시트 공유 링크 만드는 법 (배합비 등 표 형식 결과물)"):
-        _show_share_guide()
-
-    st.markdown("")
-    with st.expander("📁 구글 드라이브 파일 공유 링크 만드는 법 (HTML·PDF 등)"):
-        st.markdown("""
-<div style="background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:10px;
-padding:16px 20px;margin:4px 0;">
-<div style="font-size:14px;font-weight:700;color:#0f172a;margin-bottom:12px;">
-📁 구글 드라이브 파일 업로드 &amp; 공유 링크 만들기</div>
-<div style="font-size:13px;color:#334155;line-height:1.9;">
-
-<b style="color:#0f172a;">① 구글 드라이브에 파일 업로드</b><br>
-&nbsp;&nbsp;• <b>drive.google.com</b> 접속 (Gmail 계정 로그인 필요)<br>
-&nbsp;&nbsp;• 좌측 상단 <span style="background:#e2e8f0;border-radius:4px;padding:1px 6px;font-size:12px;font-weight:600;">+ 새로 만들기</span> 클릭 → <b>"파일 업로드"</b> 선택<br>
-&nbsp;&nbsp;• 내 컴퓨터에서 저장한 파일(HTML·PDF 등) 선택 후 업로드<br><br>
-
-<b style="color:#0f172a;">② 파일 공유 설정 (누구나 볼 수 있게)</b><br>
-&nbsp;&nbsp;• 업로드된 파일에서 <b>마우스 우클릭</b> → <b>"공유"</b> 클릭<br>
-&nbsp;&nbsp;• 공유 팝업에서 <b>"일반 액세스"</b> 항목의 <b>"변경"</b> 클릭<br>
-&nbsp;&nbsp;• <b>"링크가 있는 모든 사용자"</b> 선택 → 역할: <b>뷰어</b><br>
-&nbsp;&nbsp;• <span style="background:#e2e8f0;border-radius:4px;padding:1px 6px;font-size:12px;font-weight:600;">완료</span> 클릭<br><br>
-
-<b style="color:#0f172a;">③ 링크 복사 후 과제 제출란에 붙여넣기</b><br>
-&nbsp;&nbsp;• 공유 팝업 하단 <b>"링크 복사"</b> 클릭<br>
-&nbsp;&nbsp;• 복사된 링크를 과제 제출의 <b>파일 링크</b> 입력칸에 붙여넣기
-
-</div></div>""", unsafe_allow_html=True)
-
-    with st.expander("🎞️ NotebookLM 슬라이드 전체공유 링크 만드는 법"):
-        st.markdown("""
-<div style="background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:10px;
-padding:16px 20px;margin:4px 0;">
-<div style="font-size:14px;font-weight:700;color:#0f172a;margin-bottom:12px;">
-🎞️ NotebookLM 슬라이드 생성 &amp; 전체공유 링크 만들기</div>
-<div style="font-size:13px;color:#334155;line-height:1.9;">
-
-<b style="color:#0f172a;">① NotebookLM에서 슬라이드 만들기</b><br>
-&nbsp;&nbsp;• <b>notebooklm.google.com</b> 접속 → 해당 노트북 열기<br>
-&nbsp;&nbsp;• 우측 패널 <b>"노트북 가이드"</b> 클릭<br>
-&nbsp;&nbsp;• 하단 <b>"슬라이드 만들기"</b> 또는 <b>"프레젠테이션"</b> 선택<br>
-&nbsp;&nbsp;• AI가 자동으로 슬라이드를 생성합니다<br><br>
-
-<b style="color:#0f172a;">② 슬라이드 전체공유 링크 만들기</b><br>
-&nbsp;&nbsp;• 슬라이드가 열리면 우측 상단 <b>공유 아이콘(↗)</b> 또는 <b>"공유"</b> 버튼 클릭<br>
-&nbsp;&nbsp;• <b>"프레젠테이션 공유"</b> 팝업에서 <b>"링크가 있는 모든 사용자"</b> 선택<br>
-&nbsp;&nbsp;• <b>"링크 복사"</b> 클릭<br><br>
-
-<b style="color:#0f172a;">③ 링크 붙여넣기</b><br>
-&nbsp;&nbsp;• 복사된 링크를 과제 제출의 <b>파일 링크</b> 입력칸에 붙여넣기<br>
-&nbsp;&nbsp;• <span style="background:#fef9c3;border-radius:4px;padding:1px 6px;font-size:12px;">
-⚠️ Google 계정으로 로그인 상태에서만 생성 가능합니다</span>
-
-</div></div>""", unsafe_allow_html=True)
-
 
 # ----------------------------------------------------------
 # 1. 신제품 개발 프로세스
@@ -3496,7 +3486,6 @@ RTD 음료 마케터의 페르소나를 아래의 정보를 적용해서 작성�
         }
         render_persona_coach(prompt_r, r_fields, r_defaults, f"r_{rtk}",
                              submit_inst=_PERSONA_SUBMIT_INSTRUCTION)
-        # 파일링크 불필요: 연구자 페르소나 스크립트는 텍스트 제출로 충분
         _hw_ui("연구원_페르소나", prompt_r, "r_hw_submit")
 
     with tab_marketer:
@@ -3687,7 +3676,6 @@ RTD 음료 마케터의 페르소나를 아래의 정보를 적용해서 작성�
             "마케팅 포인트": mp["마케팅 포인트"], "확인 질문": mp["확인 질문"],
         }
         render_persona_coach(prompt_m, m_fields, m_defaults, f"m_{mtk}")
-        # 파일링크 불필요: 마케터 페르소나 스크립트는 텍스트 제출로 충분
         show_transfer_box(
             "s2",
             "내 회사의 실제 직무 기준이라면, 페르소나에서 어떤 항목을 어떻게 고쳐야 할까요?",
@@ -4552,8 +4540,8 @@ AI는 **화면을 볼 수 없습니다.** 그래서 "마켓컬리에서 음료 �
                    st.session_state.get("kurly_analysis_script")
                    or st.session_state.get("pw_user_code", ""),
                    "code_run_hw_submit",
-                   ai_label="GPT 분석 결과",
-                   title="과제 제출 — 수집 결과 + 시장분석")
+                   by_capture=True, memo_label="한 줄 분석 요약",
+                   title="과제 제출 — 수집 결과 + 시장분석 (캡처)")
 
 
     if _CRAWL_ONLY:
@@ -4641,19 +4629,30 @@ AI는 **화면을 볼 수 없습니다.** 그래서 "마켓컬리에서 음료 �
             "회사 내부 자료나 개인정보는 넣지 마세요."
         )
 
-        st.caption("앱 설명은 자동으로 함께 제출됩니다. 아래 칸에는 앱이 만들어 준 **내 음료 이름·소개**와 "
-                   "고친 점, 공유 링크가 있으면 링크를 붙여넣으세요.")
+        st.caption("앱 설명은 자동으로 함께 제출됩니다. 앱이 만들어 준 **내 음료 결과 화면**을 캡처해 제출하세요.")
         _hw_ui("앱만들기연습", prompt_app, "app_hw_submit",
-               ai_label="내 음료 결과 (음료 이름 · 소개 · 고친 점 · 공유 링크)",
-               title="과제 제출 — 나만의 음료 만들기 앱")
+               by_capture=True, memo_label="음료 이름 · 한 줄 소개",
+               title="과제 제출 — 나만의 음료 만들기 앱 (캡처)")
 
     with tab_food:
         show_step_guide(
             _S4_STEPS, 2,
             todo="식품안전나라 품목제조보고 데이터를 AI에 학습시켜 원재료를 분석합니다.",
-            uses="앞 단계에서 정한 제품 카테고리와 분석 관점",
+            uses="앞 단계에서 정한 제품 카테고리와 분석 관점 (새 채팅 첫 메시지에 한 줄로 적기)",
             produces="경쟁 제품 원재료·성분 분석 결과",
             minutes=15,
+        )
+        # 큰 데이터 파일을 올리는 단계라 긴 대화에 이어 붙이지 않고 같은 프로젝트의 새 채팅에서 시작한다
+        st.info(
+            "💬 **같은 프로젝트 안에서 '새 채팅'을 열어 진행하세요.**\n\n"
+            "- **왜 새 채팅?** 대화가 길어질수록 AI는 매번 앞 대화 전체를 다시 읽습니다. "
+            "답이 느려지고, 앞부분을 놓치거나 정확도가 떨어지며, 사용량 한도도 빨리 찹니다. "
+            "이 단계는 큰 데이터 파일을 올리므로 특히 새 채팅이 유리합니다.\n"
+            "- **새 채팅이어도 이어집니다.** 프로젝트에 올린 소스 파일과 프로젝트 지침은 "
+            "프로젝트 안 모든 채팅에 그대로 적용됩니다. 설정의 메모리에서 '채팅 기록 참고'가 켜져 있으면 "
+            "같은 프로젝트의 이전 대화도 참고합니다.\n"
+            "- **꼭 이어야 할 내용은 직접 적기** — 첫 메시지에 '내 제품 카테고리: ○○ / 분석 관점: ○○'처럼 "
+            "한 줄로 적어 주면 확실합니다."
         )
         # 실습 시간 확보를 위해 과채주스 파일은 내리고 혼합음료 1종만 제공
         _btn_food_html = (
@@ -4764,7 +4763,6 @@ AI는 **화면을 볼 수 없습니다.** 그래서 "마켓컬리에서 음료 �
                 st.caption("📋 아래 코드 블록 우측 상단 복사 아이콘 클릭 → ChatGPT, Gemini 등에 붙여넣기")
                 st.code(food_script + _SUBMIT_INSTRUCTION, language=None)
 
-            # 파일링크 불필요: 식품전문정보 분석 스크립트는 텍스트 제출로 충분
             _hw_ui("식품전문정보분석", st.session_state.get("food_user_script", ""), "food_hw_submit")
 
     # ── 탭 3: 시장조사 데이터 학습 (편의점 매대 사진 분석) ──
@@ -4933,9 +4931,7 @@ AI는 **화면을 볼 수 없습니다.** 그래서 "마켓컬리에서 음료 �
                 st.caption("📋 아래 코드 블록 우측 상단 복사 아이콘 클릭 → ChatGPT, Gemini 등에 붙여넣기")
                 st.code(learn_script + _SUBMIT_INSTRUCTION, language=None)
 
-            # 파일링크: NotebookLM에서 만든 슬라이드/오디오 링크를 제출
-            _hw_ui("시장조사학습", st.session_state.get("learn_user_script", ""), "learn_hw_submit",
-                   with_file=True)
+            _hw_ui("시장조사학습", st.session_state.get("learn_user_script", ""), "learn_hw_submit")
 
     # ── 탭 4: 보고서 작성하기 ──
     with tab_report:
@@ -5023,9 +5019,10 @@ Step 1 &nbsp;·&nbsp; ChatGPT에서 보고서로 출력할 수 있는 스크립�
 - 수치에는 출처를 붙이고, 출처가 없으면 [추정]이라고 표시해.
 - 없는 데이터를 지어내지 마.""", language=None)
 
-        # 파일링크 불필요: 보고서 작성 스크립트는 텍스트 제출로 충분
-        _hw_ui("보고서작성", st.session_state.get("report_user_script", ""), "report_hw_submit")
-        st.caption("💬 ChatGPT에서 보고서를 생성한 결과를 제출해주세요.")
+        _hw_ui("보고서작성", st.session_state.get("report_user_script", ""), "report_hw_submit",
+               by_capture=True, memo_label="보고서 한 줄 요약",
+               title="과제 제출 — 시장분석 보고서 (캡처)")
+        st.caption("💬 ChatGPT가 만든 보고서 화면을 표·그래프가 보이게 캡처해 제출하세요.")
 
         st.markdown("---")
 
@@ -5115,9 +5112,11 @@ font-size:15px;color:#1d4ed8;font-weight:700;line-height:1.7;">🎯 학습자 �
                 _nb_clicked = st.button("📤 슬라이드 스크립트 제출", key="report_nb_submit",
                                         type="primary", use_container_width=True)
             if _nb_clicked:
-                if _nb_input.strip():
+                if _nb_img is None:
+                    st.warning("NotebookLM 슬라이드 화면 캡처를 먼저 붙여넣어 주세요.")
+                elif _nb_input.strip():
                     _ok, _err = _submit_report_nb(_s2_student, _nb_input.strip())
-                    if _ok:   # 보고서작성_캡처 — Step 1 캡처가 있으면 최신(슬라이드) 캡처로 바뀜
+                    if _ok:   # 보고서작성_캡처 — Step 1 보고서 캡처가 최신(슬라이드) 캡처로 바뀜
                         _ok, _err = _save_hw_capture("보고서작성", _s2_student, _nb_img)
                     st.session_state["report_nb_done"] = _ok
                     st.session_state["report_nb_err"] = _err if not _ok else ""
@@ -5881,8 +5880,7 @@ elif section == "3️⃣ 제품개발용 데이터":
                       "출력 형식": _OUT3["하나씩 목록으로"],
                       "요청사항": ""}
         render_data_coach(prompt_d, d_fields, d_defaults, "d_build")
-        _hw_ui("데이터수집스크립트", prompt_d, "collect_hw_submit",
-               with_file=True, guide_type="gpt")
+        _hw_ui("데이터수집스크립트", prompt_d, "collect_hw_submit")
 
 
     # ── 📚 지식베이스(라이브러리) 등록하기 — 기본 실습 ─────────
@@ -5943,8 +5941,8 @@ elif section == "3️⃣ 제품개발용 데이터":
 
         st.caption("AI가 답한 내용을 아래 **AI 학습결과 확인 답변** 칸에 붙여넣어 제출하세요.")
         _hw_ui("데이터학습지시", _CHECK_SCRIPT, "train_hw_submit",
-               ai_label="AI 학습결과 확인 답변",
-               title="과제 제출 — 라이브러리에서 불러온 결과")
+               by_capture=True, memo_label="한 줄 메모",
+               title="과제 제출 — 등록한 파일 + 확인 답변 화면 (캡처)")
 
     # ── 📁 프로젝트 소스로 등록하기 — 심화 ─────────────────────
     with tab_project:
@@ -6009,8 +6007,7 @@ elif section == "5️⃣ 배합비 개발":
         "5 / 7"
     )
     show_mission([
-        "'음료개발_데이터베이스'를 STEP 3에서 만든 ChatGPT 프로젝트에 소스로 등록하기",
-        "STEP 4에서 훈련한 AI에게 제품기획안을 받아 배합비 스크립트로 바꾸기",
+        "훈련한 AI에게 제품기획안을 받아 배합비 스크립트로 바꾸기",
         "배합시뮬레이터 구조를 반영한 텍스트 표로 원재료·배합비·단가·이화학 계산이 포함된 결과물 받기",
     ])
 
@@ -6027,16 +6024,15 @@ elif section == "5️⃣ 배합비 개발":
     )
 
     _S5_STEPS = ["DB 구조 확인", "예시 스크립트", "배합비 작성",
-                 "미션1 검증", "미션2 대응", "연구원 검토", "마케터 미팅"]
+                 "미션1 검증", "미션2 대응", "연구원 검토"]
 
-    tab_db, tab_ex, tab_write, tab_m1, tab_m2, tab_p1, tab_p2 = st.tabs([
+    tab_db, tab_ex, tab_write, tab_m1, tab_m2, tab_p1 = st.tabs([
         "📊 데이터베이스 구조",
         "📖 예시 스크립트",
         "✏️ 배합비 작성",
         "🎯 미션1 · 무결성 검증",
         "🎯 미션2 · 시나리오 대응",
         "🔬 연구원 검토받기",
-        "🤝 마케터와 미팅",
     ])
 
     # ── 음료개발_데이터베이스 구조 ──────────────────────
@@ -6673,8 +6669,7 @@ padding:14px 18px;margin:8px 0;">
             f"선택 시나리오: {_ms2_scn_label}",
             f"작성 스크립트:\n{st.session_state.get('ms2_script', '')}",
         ])
-        # 파일링크 필요: AI로 작성한 배합비를 구글 시트에 정리해 링크로 제출
-        _hw_ui("배합비_미션", _mission_content, "bev_mission_hw_submit", with_file=True)
+        _hw_ui("배합비_미션", _mission_content, "bev_mission_hw_submit")
 
     # ── 개발 프로세스 실습 ──────────────────────────────
     with tab_p1:
@@ -6829,103 +6824,6 @@ padding:14px 20px;margin-bottom:12px;">
         if _s2_result and "\n" not in _s2_result and len(_s2_result) > 60:
             st.warning("줄바꿈(Enter)이 없습니다. AI 결과 전체를 여러 줄로 붙여넣어 주세요.")
 
-    with tab_p2:
-        show_step_guide(
-            _S5_STEPS, 6,
-            todo="마케터 페르소나와 미팅해 연구원 시각과 균형 잡힌 최종안을 만듭니다.",
-            uses="연구원 검토를 마친 배합비",
-            produces="최종 확정안 — STEP 6 가상검증의 입력값",
-            minutes=10,
-        )
-        show_mission([
-            "마케터 페르소나와 인터뷰 — 연구원 관점과 균형 잡힌 시각으로 최종안 도출",
-        ])
-
-        # ── 마케터 인터뷰 ────────────────────────
-        st.markdown("""
-<div style="background:#f0fdf4;border-left:4px solid #10b981;border-radius:0 8px 8px 0;
-padding:14px 20px;margin-bottom:16px;">
-<div style="font-size:15px;font-weight:800;color:#064e3b;margin-bottom:4px;">
-🤝 STEP 3. 마케터 페르소나 인터뷰 → 균형 잡힌 시각 도출</div>
-<div style="font-size:13px;color:#065f46;">
-아래 고정 스크립트를 AI에 입력하면 STEP 1·2의 연구원 훈련·검증 결과를 토대로
-마케터 페르소나가 균형 잡힌 시각으로 인터뷰를 진행합니다.
-</div></div>""", unsafe_allow_html=True)
-
-        # ── 전략 지표 차트 + 회의실 비주얼 ──────────────
-        st.markdown(
-            "<div style='display:flex;gap:14px;margin:4px 0 20px;flex-wrap:wrap;'>"
-
-            "<div style='flex:1;min-width:200px;background:#fff;border:1.5px solid #e2e8f0;"
-            "border-radius:12px;padding:18px;'>"
-            "<div style='font-size:12px;font-weight:700;color:#0f172a;margin-bottom:2px;'>📊 제품 전략 평가 지표</div>"
-            "<div style='font-size:10px;color:#64748b;margin-bottom:14px;'>연구원 × 마케터 협업 분석 (예시)</div>"
-            "<div style='margin-bottom:9px;'><div style='display:flex;justify-content:space-between;margin-bottom:3px;'>"
-            "<span style='font-size:11px;color:#334155;'>시장성</span>"
-            "<span style='font-size:11px;font-weight:700;color:#3b82f6;'>85%</span></div>"
-            "<div style='background:#e2e8f0;border-radius:4px;height:8px;'>"
-            "<div style='background:#3b82f6;width:85%;height:8px;border-radius:4px;'></div></div></div>"
-            "<div style='margin-bottom:9px;'><div style='display:flex;justify-content:space-between;margin-bottom:3px;'>"
-            "<span style='font-size:11px;color:#334155;'>관능 경쟁력</span>"
-            "<span style='font-size:11px;font-weight:700;color:#10b981;'>72%</span></div>"
-            "<div style='background:#e2e8f0;border-radius:4px;height:8px;'>"
-            "<div style='background:#10b981;width:72%;height:8px;border-radius:4px;'></div></div></div>"
-            "<div style='margin-bottom:9px;'><div style='display:flex;justify-content:space-between;margin-bottom:3px;'>"
-            "<span style='font-size:11px;color:#334155;'>원가 경쟁력</span>"
-            "<span style='font-size:11px;font-weight:700;color:#f59e0b;'>68%</span></div>"
-            "<div style='background:#e2e8f0;border-radius:4px;height:8px;'>"
-            "<div style='background:#f59e0b;width:68%;height:8px;border-radius:4px;'></div></div></div>"
-            "<div style='margin-bottom:9px;'><div style='display:flex;justify-content:space-between;margin-bottom:3px;'>"
-            "<span style='font-size:11px;color:#334155;'>차별화 포인트</span>"
-            "<span style='font-size:11px;font-weight:700;color:#8b5cf6;'>90%</span></div>"
-            "<div style='background:#e2e8f0;border-radius:4px;height:8px;'>"
-            "<div style='background:#8b5cf6;width:90%;height:8px;border-radius:4px;'></div></div></div>"
-            "<div><div style='display:flex;justify-content:space-between;margin-bottom:3px;'>"
-            "<span style='font-size:11px;color:#334155;'>시장 진입 가능성</span>"
-            "<span style='font-size:11px;font-weight:700;color:#ef4444;'>78%</span></div>"
-            "<div style='background:#e2e8f0;border-radius:4px;height:8px;'>"
-            "<div style='background:#ef4444;width:78%;height:8px;border-radius:4px;'></div></div></div>"
-            "</div>"
-
-            "<div style='flex:1;min-width:200px;background:linear-gradient(160deg,#1e293b 0%,#0f172a 100%);"
-            "border-radius:12px;padding:18px;'>"
-            "<div style='font-size:11px;font-weight:700;color:#e2e8f0;margin-bottom:14px;'>🏛️ 전략 회의실 — 연구원 × 마케터</div>"
-            "<div style='background:#334155;border-radius:40px;height:36px;margin:0 16px 10px;"
-            "display:flex;align-items:center;justify-content:center;border:2px solid #475569;'>"
-            "<span style='font-size:10px;color:#94a3b8;letter-spacing:1px;'>CONFERENCE TABLE</span></div>"
-            "<div style='display:flex;justify-content:space-around;align-items:center;margin-bottom:14px;'>"
-            "<div style='text-align:center;'><div style='font-size:28px;'>👨‍🔬</div>"
-            "<div style='font-size:9px;color:#93c5fd;margin-top:2px;'>시니어 연구원</div></div>"
-            "<div style='font-size:18px;color:#475569;'>⇄</div>"
-            "<div style='text-align:center;'><div style='font-size:28px;'>👩‍💼</div>"
-            "<div style='font-size:9px;color:#6ee7b7;margin-top:2px;'>마케터</div></div></div>"
-            "<div style='background:rgba(59,130,246,0.15);border-left:3px solid #3b82f6;"
-            "border-radius:0 6px 6px 0;padding:7px 10px;margin-bottom:7px;'>"
-            "<div style='font-size:10px;color:#93c5fd;'>👨‍🔬 &nbsp;\"배합비 최적화 완료 · Brix 12° 달성\"</div></div>"
-            "<div style='background:rgba(16,185,129,0.15);border-left:3px solid #10b981;"
-            "border-radius:0 6px 6px 0;padding:7px 10px;'>"
-            "<div style='font-size:10px;color:#6ee7b7;'>👩‍💼 &nbsp;\"저당 트렌드 부합 · 편의점 출시 추천\"</div></div>"
-            "</div>"
-
-            "</div>",
-            unsafe_allow_html=True,
-        )
-
-        st.caption("아래 스크립트를 복사해 AI에 붙여넣으세요.")
-        st.code(
-            "이들의 step1,2,3을 시니어연구원의 훈련내용과 개선내용을 토대로 "
-            "마케터 페르소나의 균형잡힌 시각의 인터뷰를 진행해주세요.",
-            language=None,
-        )
-
-        st.markdown("**📋 STEP 3 결과 — AI 인터뷰 결과 붙여넣기**")
-        st.caption("AI가 진행한 연구원 × 마케터 인터뷰 내용을 그대로 붙여넣으세요.")
-        _s3_result = st.text_area("s3memo",
-                     placeholder="AI가 출력한 마케터 인터뷰 결과를 여기에 붙여넣으세요.",
-                     key="proc_step3", height=150, label_visibility="collapsed")
-        if _s3_result and "\n" not in _s3_result and len(_s3_result) > 60:
-            st.warning("줄바꿈(Enter)이 없습니다. AI 결과 전체를 여러 줄로 붙여넣어 주세요.")
-
         show_transfer_box(
             "s5",
             "이 배합 개발·검증 절차를 내 제품에 적용하면 무엇이 달라질까요? (규격 항목·검증 지표 중심)",
@@ -6933,42 +6831,9 @@ padding:14px 20px;margin-bottom:16px;">
             secret_warn=True,
         )
 
-        # ── 과제 제출 (STEP별 분리 저장) ────────────────
-        st.markdown("---")
-        st.markdown("##### 📤 과제 제출")
-        st.caption("STEP 1·2·3 결과가 모두 입력되면 제출 버튼을 누르세요. 각 STEP은 구글시트 별도 열에 저장됩니다.")
-        _proc_student = st.session_state.get("student_name", "")
-        if not _proc_student:
-            st.warning("과제를 제출하려면 먼저 로그인하세요.")
-        else:
-            _all_filled = bool(
-                st.session_state.get("proc_step1", "").strip() and
-                st.session_state.get("proc_step2", "").strip() and
-                st.session_state.get("proc_step3", "").strip()
-            )
-            if not _all_filled:
-                st.info("STEP 1·2·3 결과를 모두 입력해야 제출할 수 있습니다.")
-            _proc_img = _capture_field("proc_cap")
-            _proc_btn = st.button(
-                "📤 개발 프로세스 제출",
-                key="proc_hw_submit",
-                type="primary",
-                disabled=not _all_filled,
-                use_container_width=True,
-            )
-            if _proc_btn:
-                _ok, _err = _submit_process_hw(
-                    _proc_student,
-                    st.session_state.get("proc_step1", ""),
-                    st.session_state.get("proc_step2", ""),
-                    st.session_state.get("proc_step3", ""),
-                )
-                if _ok:
-                    _ok, _err = _save_hw_capture("배합비_프로세스", _proc_student, _proc_img)
-                if _ok:
-                    st.success(f"✅ **{_proc_student}** 님 제출 완료!")
-                else:
-                    st.error(f"제출 실패: {_err}")
+        _proc_submit_ui("proc_review_submit", "연구원 검토 제출",
+                        [(1, "연구원 훈련"), (2, "배합비 검증")])
+
 
 
 # ----------------------------------------------------------
@@ -7360,7 +7225,8 @@ elif section == "6️⃣ 가상모델 개발":
         # HTML 붙여넣기 → 앱 내 렌더링
         st.markdown("---")
         st.markdown("**🖥️ AI가 생성한 HTML 코드 붙여넣기 → 앱에서 바로 실행**")
-        st.caption("제미나이가 출력한 전체 HTML 코드를 아래에 붙여넣으면 이 앱 안에서 바로 시뮬레이터를 실행합니다.")
+        st.caption("제미나이 답변을 복사해 붙여넣으면 HTML만 골라 이 앱 안에서 바로 실행합니다. "
+                   "(코드블록 표시·설명 문장이 섞여도 괜찮습니다)")
 
         twin_html_input = st.text_area(
             "twin_html_lbl",
@@ -7372,10 +7238,12 @@ elif section == "6️⃣ 가상모델 개발":
 
         _tc1, _tc2, _tc3 = st.columns(3)
         with _tc1:
+            # disabled를 걸면 붙여넣은 직후 첫 클릭이 무시되므로(입력은 칸을 벗어날 때 반영) 항상 누를 수 있게 둔다
             if st.button("▶️ 시뮬레이터 실행", key="twin_render_btn",
-                         use_container_width=True, type="primary",
-                         disabled=not bool(twin_html_input)):
+                         use_container_width=True, type="primary"):
                 st.session_state["twin_render_show"] = True
+                if not twin_html_input.strip():
+                    st.warning("먼저 위 칸에 HTML 코드를 붙여넣으세요.")
         with _tc2:
             if st.button("🔍 가상 시뮬레이터 예시보기", key="twin_example_btn", use_container_width=True):
                 _show_twin_example_dialog()
@@ -7384,24 +7252,29 @@ elif section == "6️⃣ 가상모델 개발":
                 _bev_nm_dl = st.session_state.get("bev_prodname", "신제품")
                 st.download_button(
                     "📥 HTML 파일 다운로드",
-                    data=twin_html_input.encode("utf-8"),
+                    data=_clean_ai_html(twin_html_input).encode("utf-8"),
                     file_name=f"twin_lab_{_bev_nm_dl}.html",
                     mime="text/html",
                     key="twin_html_dl",
                     use_container_width=True,
                 )
 
-        if st.session_state.get("twin_render_show") and twin_html_input:
+        if st.session_state.get("twin_render_show") and twin_html_input.strip():
+            _twin_page = _clean_ai_html(twin_html_input)
             st.markdown("**⬇️ 트윈랩 시뮬레이터 (스크롤해서 사용)**")
+            if "<" not in _twin_page or not re.search(r"<(html|body|div|script|canvas|svg)", _twin_page, re.I):
+                st.warning("HTML 코드가 보이지 않습니다. 제미나이 답변의 코드 부분(<!DOCTYPE html> … </html>)을 붙여넣었는지 확인하세요.")
+            elif "</html>" not in _twin_page.lower() and "<!doctype" in _twin_page.lower():
+                st.warning("코드 끝(</html>)이 없습니다. 답변이 중간에 끊겼을 수 있으니 제미나이에게 '이어서 써 줘'라고 한 뒤 전체를 다시 붙여넣으세요.")
             import streamlit.components.v1 as components
-            components.html(twin_html_input, height=660, scrolling=True)
+            components.html(_twin_page, height=760, scrolling=True)
 
         st.markdown("---")
         st.markdown(
-            "**💡 구글 드라이브 공유 방법**\n\n"
-            "1. 위 📥 HTML 파일 다운로드 버튼으로 저장\n"
-            "2. 구글 드라이브에 업로드 → 공유 링크 설정 (링크 있는 모든 사용자 뷰어)\n"
-            "3. 아래 과제 제출란에 링크 붙여넣기"
+            "**💡 제출 방법**\n\n"
+            "1. 위 ▶️ 시뮬레이터 실행으로 화면을 띄우고 슬라이더를 조정\n"
+            "2. 결과가 보이게 Win+Shift+S로 캡처\n"
+            "3. 아래 과제 제출란에 '📋 캡처 붙여넣기' (HTML 파일은 📥 다운로드로 따로 보관)"
         )
 
         st.markdown("**디지털 트윈랩 결과 메모**")
@@ -7418,9 +7291,10 @@ elif section == "6️⃣ 가상모델 개발":
             f"공정 흐름도: {'포함 (' + ' → '.join(twin_process[:3]) + '…)' if twin_process else '미포함'}",
             f"결과 메모: {st.session_state.get('twin_result', '')}",
         ])
-        # 파일링크 필요: AI가 생성한 HTML 시뮬레이터 파일을 드라이브에 올려 링크로 제출
         # show_ai_field=False: HTML 코드 전체가 제출내용에 포함되므로 AI결과 별도 입력 불필요
-        _hw_ui("디지털트윈랩", _twin_content, "twin_hw_submit", with_file=True, show_ai_field=False)
+        _hw_ui("디지털트윈랩", _twin_content, "twin_hw_submit",
+               by_capture=True, memo_label="결과 한 줄 요약",
+               title="과제 제출 — 트윈랩 시뮬레이터 (캡처)")
 
     # ── Tab 2: 가상 소비자 모델 제작 ─────────────────────
     with tab_consumer:
@@ -7529,7 +7403,6 @@ elif section == "6️⃣ 가상모델 개발":
             f"항목: {_con_items_str}",
             f"합격기준: {con_pass_score}점",
         ])
-        # 파일링크 불필요: 가상 소비자 모델 결과는 텍스트 제출로 충분
         _hw_ui("가상소비자모델", _con_content, "con_hw_submit", show_ai_field=True)
 
     # ── Tab 3: 관능검사 ────────────────────────────────────
@@ -7649,14 +7522,15 @@ elif section == "6️⃣ 가상모델 개발":
             f"전체 평균: {_avg_score:.1f}점",
             f"결과 메모: {st.session_state.get('sen_result', '')}",
         ])
-        # 파일링크 불필요: 관능검사 결과는 텍스트 제출로 충분
         show_transfer_box(
             "s6",
             "내 제품을 가상 검증한다면 어떤 지표와 소비자 패널이 필요할까요?",
             "예: 재가열 후 식감·육즙감 평가, 30~40대 자녀가구 패널, 합격 기준 5.5점",
         )
 
-        _hw_ui("관능검사", _sen_content, "sen_hw_submit")
+        _hw_ui("관능검사", _sen_content, "sen_hw_submit",
+               by_capture=True, memo_label="결과 한 줄 해석",
+               title="과제 제출 — 관능검사 결과 (캡처)")
 
 
 # ----------------------------------------------------------
@@ -7704,7 +7578,6 @@ elif section == "7️⃣ 프로젝트 정리":
     _r_bev_nm = st.session_state.get("bev_prodname", "")
     _r_proc1  = st.session_state.get("proc_step1", "")
     _r_proc2  = st.session_state.get("proc_step2", "")
-    _r_proc3  = st.session_state.get("proc_step3", "")
     _r_twin   = st.session_state.get("twin_result", "")
     _r_con    = st.session_state.get("con_hw_submit_ai", "")
     _r_sen    = st.session_state.get("sen_result", "")
@@ -7761,8 +7634,6 @@ elif section == "7️⃣ 프로젝트 정리":
         st.text(_r_proc1 or "(아직 입력하지 않았습니다)")
         st.markdown("**STEP 2 시니어 연구원 코칭 결과**")
         st.text(_r_proc2 or "(아직 입력하지 않았습니다)")
-        st.markdown("**STEP 3 마케팅 분석 & 최종안 결과**")
-        st.text(_r_proc3 or "(아직 입력하지 않았습니다)")
         st.markdown("**미션1 무결성 검증**")
         st.text(
             f"{_r_mv_note or '미입력'}"
@@ -7837,7 +7708,6 @@ elif section == "7️⃣ 프로젝트 정리":
             f"배합비: {_trunc(_r_bev)}\n"
             f"STEP1: {_r_proc1 or '미입력'}\n"
             f"STEP2: {_r_proc2 or '미입력'}\n"
-            f"STEP3: {_r_proc3 or '미입력'}\n"
             f"미션1(무결성검증): {_r_mv_note or '미입력'}\n"
             f"미션2(시나리오대응): {_r_ms2_scn} — {_trunc(_r_ms2_script)}"
         ),
@@ -7879,9 +7749,8 @@ elif section == "7️⃣ 프로젝트 정리":
         "[AI 최종 요약 결과]\n" + (p7_ai_summary if p7_ai_summary else "(미입력)"),
     ])
 
-    # 파일링크 필요: 최종 결과물을 문서/PDF로 정리해 드라이브 링크로 제출
     # show_ai_field=False: 최종 정리 내용이 제출내용에 포함되므로 AI결과 별도 입력 불필요
-    _hw_ui("프로젝트정리", _p7_final_content, "p7_hw_submit", with_file=True, show_ai_field=False)
+    _hw_ui("프로젝트정리", _p7_final_content, "p7_hw_submit", show_ai_field=False)
 
 
 # ----------------------------------------------------------
