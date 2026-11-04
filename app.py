@@ -3601,6 +3601,12 @@ RTD 음료 마케터의 페르소나를 아래의 정보를 적용해서 작성�
         }
         render_persona_coach(prompt_r, r_fields, r_defaults, f"r_{rtk}",
                              submit_inst=_PERSONA_SUBMIT_INSTRUCTION)
+        st.info(
+            "💡 **만든 페르소나, 이렇게 계속 쓰세요 — 프로젝트 지침으로 등록**\n\n"
+            "1. ChatGPT 왼쪽 사이드바에서 사전준비 때 만든 **프로젝트** 열기\n"
+            "2. 프로젝트 설정 → **지시사항(Instructions)** 에 위 페르소나 스크립트를 붙여넣고 저장\n"
+            "3. 이제 이 프로젝트의 **모든 새 채팅**이 매번 붙여넣지 않아도 이 연구원처럼 답합니다"
+        )
         _hw_ui("연구원_페르소나", prompt_r, "r_hw_submit")
 
     with tab_marketer:
@@ -5995,6 +6001,13 @@ elif section == "3️⃣ 제품개발용 데이터":
                       "출력 형식": _OUT3["하나씩 목록으로"],
                       "요청사항": ""}
         render_data_coach(prompt_d, d_fields, d_defaults, "d_build")
+        st.info(
+            "💡 **찾은 자료, 이렇게 계속 쓰세요 — 라이브러리 문서로 저장**\n\n"
+            "1. 자료를 찾은 대화창에 이어서: *\"위 자료를 워드 파일(.docx)로 정리해 줘\"*\n"
+            "2. 만들어진 파일은 왼쪽 사이드바 **라이브러리 → 생성됨** 에 자동 저장됩니다\n"
+            "3. 다른 대화에서 쓸 때: 입력창 **'+' → 라이브러리에서 추가** → 파일 선택 → *\"이 파일 기준으로 답해 줘\"*\n\n"
+            "자세한 방법은 다음 탭 **「📚 지식베이스(라이브러리) 등록하기」** 에서 실습합니다."
+        )
         _hw_ui("데이터수집스크립트", prompt_d, "collect_hw_submit")
 
 
