@@ -427,26 +427,33 @@ def _get_gs_client():
 
 _HW_HEADERS = ["제출시간", "학생이름", "작성 스크립트", "AI 생성결과", "파일링크"]
 
-# 앱 내 모든 과제 제출 시트 탭 목록 (섹션·탭 단위로 1:1 대응)
-_ALL_HW_TABS = [
-    "연구원_페르소나",   # 2️⃣ 제품개발 페르소나 > 연구원 탭
-    "마케터_페르소나",   # 2️⃣ 제품개발 페르소나 > 마케터 탭
-    "데이터수집스크립트",# 3️⃣ 제품개발용 데이터 > 데이터 수집 스크립트 탭
-    "데이터학습지시",    # 3️⃣ 제품개발용 데이터 > 지식베이스(라이브러리) 등록하기 탭
-    "앱만들기연습",      # 4️⃣ 시장분석 및 학습 > AI 스튜디오 앱 만들기 탭
-    "온라인시장분석",    # 4️⃣ 시장분석 및 학습 > 온라인 시장분석 탭
-    "식품전문정보분석",  # 4️⃣ 시장분석 및 학습 > 식품전문정보분석 탭
-    "시장조사학습",      # 4️⃣ 시장분석 및 학습 > 시장조사 데이터 학습 탭
-    "보고서작성",        # 4️⃣ 시장분석 및 학습 > 보고서 작성하기 탭
-    "AI전환",            # 4️⃣ 시장분석 및 학습 > AI 간 대화전환 탭
-    "배합비",            # 5️⃣ 배합비 개발 > 배합비 작성 탭
-    "배합비_미션",       # 5️⃣ 배합비 개발 > 미션수행 탭
-    "배합비_프로세스",   # 5️⃣ 배합비 개발 > 개발 프로세스 실습 탭
-    "디지털트윈랩",      # 6️⃣ 가상모델 개발 > 디지털 트윈랩 탭
-    "가상소비자모델",    # 6️⃣ 가상모델 개발 > 가상 소비자 모델 제작 탭
-    "관능검사",          # 6️⃣ 가상모델 개발 > 관능검사 탭
-    "프로젝트정리",      # 7️⃣ 프로젝트 정리
+# 앱 내 모든 과제 제출 시트 탭 — (화면 표시 이름, 시트 탭), 수업 진행 순서
+# 제출물 보기 · 📊 제출현황 · 시트 탭 일괄 생성 · 탭 순서가 모두 이 목록을 따른다
+_HW_VIEW_TABS = [
+    ("2️⃣ 연구원 페르소나",      "연구원_페르소나"),
+    ("2️⃣ 마케터 페르소나",      "마케터_페르소나"),
+    ("3️⃣ 데이터 수집 스크립트", "데이터수집스크립트"),
+    ("3️⃣ 데이터 학습지시",      "데이터학습지시"),
+    ("4️⃣ AI 스튜디오 앱 만들기", "앱만들기연습"),
+    ("4️⃣ 온라인 시장분석",      "온라인시장분석"),
+    ("4️⃣ 수집 코드 실행",       "수집코드실행"),
+    ("4️⃣ 식품전문정보분석",     "식품전문정보분석"),
+    ("4️⃣ 시장조사 학습",        "시장조사학습"),
+    ("4️⃣ 보고서 작성",          "보고서작성"),
+    ("4️⃣ AI 간 대화전환",       "AI전환"),
+    ("5️⃣ 배합비 작성",          "배합비"),
+    ("5️⃣ 배합비 미션",          "배합비_미션"),
+    ("5️⃣ 배합비 프로세스",      "배합비_프로세스"),
+    ("6️⃣ 디지털트윈랩",         "디지털트윈랩"),
+    ("6️⃣ 가상소비자모델",       "가상소비자모델"),
+    ("6️⃣ 관능검사",             "관능검사"),
+    ("7️⃣ 프로젝트 정리",        "프로젝트정리"),
 ]
+_ALL_HW_TABS = [t for _, t in _HW_VIEW_TABS]
+# 결과 화면 캡처로 제출하는 과제 — 시트에 〈과제〉_캡처 탭이 과제 탭 바로 뒤에 붙는다
+_CAPTURE_TASKS = {"데이터학습지시", "앱만들기연습", "수집코드실행", "보고서작성",
+                  "배합비", "디지털트윈랩", "관능검사"}
+_SUMMARY_TAB = "📊 제출현황"
 
 # 프롬프트 복사 영역에 자동으로 붙는 제출요약 조건
 # AI가 답변 마지막에 [제출답안]: ... 을 추가 → 시트 셀에는 이 부분만 저장
@@ -873,27 +880,6 @@ def _fetch_dashboard_data():
 
 
 # ── 강사 전용 제출물 보기 (관리자 현황판 > 📽 제출물 보기) ──────────
-# (화면 표시 이름, 시트 탭) — 수업 진행 순서
-_HW_VIEW_TABS = [
-    ("2️⃣ 연구원 페르소나",      "연구원_페르소나"),
-    ("2️⃣ 마케터 페르소나",      "마케터_페르소나"),
-    ("3️⃣ 데이터 수집 스크립트", "데이터수집스크립트"),
-    ("3️⃣ 데이터 학습지시",      "데이터학습지시"),
-    ("4️⃣ AI 스튜디오 앱 만들기", "앱만들기연습"),
-    ("4️⃣ 온라인 시장분석",      "온라인시장분석"),
-    ("4️⃣ 수집 코드 실행",       "수집코드실행"),
-    ("4️⃣ 식품전문정보분석",     "식품전문정보분석"),
-    ("4️⃣ 시장조사 학습",        "시장조사학습"),
-    ("4️⃣ 보고서 작성",          "보고서작성"),
-    ("4️⃣ AI 간 대화전환",       "AI전환"),
-    ("5️⃣ 배합비 작성",          "배합비"),
-    ("5️⃣ 배합비 미션",          "배합비_미션"),
-    ("5️⃣ 배합비 프로세스",      "배합비_프로세스"),
-    ("6️⃣ 디지털트윈랩",         "디지털트윈랩"),
-    ("6️⃣ 가상소비자모델",       "가상소비자모델"),
-    ("6️⃣ 관능검사",             "관능검사"),
-    ("7️⃣ 프로젝트 정리",        "프로젝트정리"),
-]
 _HW_VIEW_LABEL = {t: l for l, t in _HW_VIEW_TABS}
 
 
@@ -1402,6 +1388,124 @@ def _prep_image_b64(img) -> str:
     return b64
 
 
+_CAP_IMG_COL = 4 + _PREP_MAX_CHUNKS + 1   # K열 — 앱스 스크립트가 실제 그림을 넣는 칸
+
+# 시트 셀에 그림을 넣는 일은 앱(서비스 계정)으로는 안 된다 — 시트 API에 셀 그림 기능이 없고,
+# 서비스 계정은 드라이브 저장 공간이 없어 이미지 파일도 못 올린다.
+# 그래서 시트 주인이 이 앱스 스크립트를 한 번 설치하면, 1분마다 숨긴 이미지 글자(E~J)를 K열 그림으로 바꾼다.
+_CAPTURE_IMG_GS = r"""/** AI 제품개발 실습 — 캡처 탭의 이미지 글자를 K열에 실제 그림으로 보여 줍니다.
+ *  설치: 시트 메뉴 [확장 프로그램 › Apps Script] → 이 코드 전체 붙여넣기 → 저장
+ *        → 위쪽 함수 목록에서 installTrigger 선택 → 실행 → 권한 허용 (처음 한 번만)  */
+const IMG_COL = 11, MAX_CHUNKS = 6;
+
+function showCaptureImages() {
+  SpreadsheetApp.getActive().getSheets().forEach(function (sh) {
+    const name = sh.getName();
+    if (!(name.slice(-3) === '_캡처' || name === '사전준비확인')) return;
+    const last = sh.getLastRow();
+    if (last < 2) return;
+    if (sh.getMaxColumns() < IMG_COL) sh.insertColumnsAfter(sh.getMaxColumns(), IMG_COL - sh.getMaxColumns());
+    sh.getRange(1, IMG_COL).setValue('캡처 이미지');
+    const rows = sh.getRange(2, 1, last - 1, 4 + MAX_CHUNKS).getDisplayValues();
+    const notes = sh.getRange(2, IMG_COL, last - 1, 1).getNotes();
+    rows.forEach(function (r, i) {
+      const stamp = r[0] + ' | ' + r[1];          // 다시 제출하면 제출시간이 바뀌어 새로 그린다
+      if (!r[1] || notes[i][0] === stamp) return;
+      const n = parseInt(r[3], 10) || 0;
+      const b64 = r.slice(4, 4 + n).join('');
+      if (!b64) return;
+      const img = SpreadsheetApp.newCellImage()
+        .setSourceUrl('data:image/jpeg;base64,' + b64)
+        .setAltTextTitle(r[1] + ' 캡처').build();
+      sh.getRange(i + 2, IMG_COL).setValue(img).setNote(stamp);
+      sh.setRowHeight(i + 2, 220);
+    });
+  });
+}
+
+function installTrigger() {
+  ScriptApp.getProjectTriggers().forEach(function (t) { ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('showCaptureImages').timeBased().everyMinutes(1).create();
+  showCaptureImages();
+}
+
+function onOpen() {
+  SpreadsheetApp.getUi().createMenu('🖼 캡처').addItem('지금 그림으로 보기', 'showCaptureImages').addToUi();
+}
+"""
+
+
+def _sheet_order() -> list:
+    """시트 탭 순서 — 제출현황 → 사전준비 → 과제 순서대로 (캡처 과제는 바로 뒤에 〈과제〉_캡처)"""
+    order = [_SUMMARY_TAB, _PREP_TAB]
+    for t in _ALL_HW_TABS:
+        order.append(t)
+        if t in _CAPTURE_TASKS:
+            order.append(_cap_tab(t))
+    return order
+
+
+def _reorder_sheet_tabs(sh):
+    """정해진 순서대로 탭을 다시 놓고, 목록에 없는 탭(접속자현황 등)은 뒤에 원래 순서대로"""
+    wss = sh.worksheets()
+    by = {w.title: w for w in wss}
+    order = _sheet_order()
+    head = [by[t] for t in order if t in by]
+    sh.reorder_worksheets(head + [w for w in wss if w.title not in order])
+
+
+def _format_capture_ws(sh, ws):
+    """캡처 탭 꾸미기 — 이미지 글자 칸(D~J)은 숨기고 K열 '캡처 이미지'를 보이게"""
+    if ws.col_count < _CAP_IMG_COL:
+        ws.resize(cols=_CAP_IMG_COL)
+    ws.update([["캡처 이미지"]], "K1")
+    sh.batch_update({"requests": [
+        {"updateDimensionProperties": {
+            "range": {"sheetId": ws.id, "dimension": "COLUMNS", "startIndex": 3, "endIndex": _CAP_IMG_COL - 1},
+            "properties": {"hiddenByUser": True}, "fields": "hiddenByUser"}},
+        {"updateDimensionProperties": {
+            "range": {"sheetId": ws.id, "dimension": "COLUMNS",
+                      "startIndex": _CAP_IMG_COL - 1, "endIndex": _CAP_IMG_COL},
+            "properties": {"pixelSize": 360}, "fields": "pixelSize"}},
+        {"updateSheetProperties": {
+            "properties": {"sheetId": ws.id, "gridProperties": {"frozenRowCount": 1}},
+            "fields": "gridProperties.frozenRowCount"}},
+    ]})
+
+
+def _new_capture_ws(sh, tab: str):
+    """캡처 탭 새로 만들기 — 머리글 + 꾸미기 + 정해진 자리로 이동"""
+    ws = sh.add_worksheet(title=tab, rows=200, cols=_CAP_IMG_COL)
+    ws.update([["제출시간", "학생이름", "메모", "이미지 칸 수"]
+               + ["이미지%d" % (i + 1) for i in range(_PREP_MAX_CHUNKS)] + ["캡처 이미지"]], "A1")
+    _format_capture_ws(sh, ws)
+    try:
+        _reorder_sheet_tabs(sh)
+    except Exception:
+        pass
+    return ws
+
+
+def _clear_all_submissions(include_access: bool = False):
+    """과제·캡처 탭의 2행부터 값과 셀 메모를 모두 지운다 (머리글·탭은 그대로). 반환 (지운 탭 수, 오류)"""
+    try:
+        sh = _get_gs_client().open_by_key(_GS_SHEET_ID)
+        targets = [t for t in _sheet_order() if t != _SUMMARY_TAB]
+        if include_access:
+            targets.append("접속자현황")
+        wss = [w for w in sh.worksheets() if w.title in targets]
+        if wss:
+            # 값(그림 포함)과 메모를 한 번에 — 메모가 남으면 새 제출에 옛 원문이 섞여 보인다
+            sh.batch_update({"requests": [
+                {"updateCells": {"range": {"sheetId": w.id, "startRowIndex": 1},
+                                 "fields": "userEnteredValue,note"}} for w in wss]})
+        for f in (_fetch_all_submissions, _fetch_captures, _fetch_full_scripts, _get_hw_count, _fetch_dashboard_data):
+            f.clear()
+        return len(wss), ""
+    except Exception as e:
+        return 0, str(e)[:200]
+
+
 def _submit_capture(tab: str, student: str, memo: str, b64: str):
     """캡처 이미지를 시트 탭에 저장 (같은 학생은 최신 제출로 덮어쓰기)"""
     from datetime import datetime, timezone, timedelta
@@ -1415,10 +1519,8 @@ def _submit_capture(tab: str, student: str, memo: str, b64: str):
         try:
             ws = sh.worksheet(tab)
         except Exception:
-            ws = sh.add_worksheet(title=tab, rows=200, cols=ncols)
-            ws.append_row(["제출시간", "학생이름", "메모", "이미지 칸 수"]
-                          + ["이미지%d" % (i + 1) for i in range(_PREP_MAX_CHUNKS)])
-            _sheet_tab_titles.clear()   # 새 캡처 탭이 제출물 보기에 바로 잡히도록
+            ws = _new_capture_ws(sh, tab)   # 맨 뒤가 아니라 과제 탭 바로 뒤에 생긴다
+            _sheet_tab_titles.clear()       # 새 캡처 탭이 제출물 보기에 바로 잡히도록
         ts = (datetime.now(timezone.utc) + timedelta(hours=9)).strftime("%Y-%m-%d %H:%M")
         row = ([ts, student, memo.strip(), str(len(chunks))] + chunks
                + [""] * (_PREP_MAX_CHUNKS - len(chunks)))
@@ -2400,38 +2502,29 @@ with st.sidebar:
                                 _created.append(_tab)
                             else:
                                 _skipped.append(_tab)
+                        # 캡처 탭(사전준비 + 캡처로 제출하는 과제) — 없으면 만들고, 있으면 이미지 글자 칸 숨기기
+                        for _ct in [_PREP_TAB] + [_cap_tab(t) for t in _ALL_HW_TABS if t in _CAPTURE_TASKS]:
+                            if _ct not in _existing:
+                                _new_capture_ws(_sh, _ct)
+                                _created.append(_ct)
+                            else:
+                                _format_capture_ws(_sh, _sh.worksheet(_ct))
+                                _skipped.append(_ct)
                         # 📊 제출현황 탭 재생성
-                        _SUMMARY = "📊 제출현황"
+                        _SUMMARY = _SUMMARY_TAB
                         if _SUMMARY in _existing:
                             _sh.del_worksheet(_sh.worksheet(_SUMMARY))
                         # cols=50: D열부터 학생 이름이 우측으로 최대 46명까지 기록 가능
                         _sw = _sh.add_worksheet(title=_SUMMARY, rows=30, cols=50)
                         _sw.update("A1:D1", [["섹션·탭", "시트명", "제출수", "제출자 →"]])
-                        _tab_sections = [
-                            ("2️⃣ 연구원 페르소나",      "연구원_페르소나"),
-                            ("2️⃣ 마케터 페르소나",      "마케터_페르소나"),
-                            ("3️⃣ 데이터 수집 스크립트", "데이터수집스크립트"),
-                            ("3️⃣ 데이터 학습지시",      "데이터학습지시"),
-                            ("4️⃣ AI 스튜디오 앱 만들기", "앱만들기연습"),
-                            ("4️⃣ 온라인 시장분석",      "온라인시장분석"),
-                            ("4️⃣ 식품전문정보분석",     "식품전문정보분석"),
-                            ("4️⃣ 시장조사 학습",        "시장조사학습"),
-                            ("4️⃣ 보고서 작성",          "보고서작성"),
-                            ("4️⃣ AI 간 대화전환",       "AI전환"),
-                            ("5️⃣ 배합비 작성",          "배합비"),
-                            ("5️⃣ 배합비 미션",          "배합비_미션"),
-                            ("5️⃣ 배합비 프로세스",      "배합비_프로세스"),
-                            ("6️⃣ 디지털트윈랩",         "디지털트윈랩"),
-                            ("6️⃣ 가상소비자모델",       "가상소비자모델"),
-                            ("6️⃣ 관능검사",             "관능검사"),
-                            ("7️⃣ 프로젝트 정리",        "프로젝트정리"),
-                        ]
+                        # 과제 탭 목록(_HW_VIEW_TABS)과 같은 순서 — 사전준비 인증이 맨 위
+                        _tab_sections = [("🏠 사전준비 인증", _PREP_TAB)] + list(_HW_VIEW_TABS)
                         _summary_rows = []
                         for _si, (_sec, _tab_name) in enumerate(_tab_sections):
                             _formula = "=IFERROR(COUNTA('" + _tab_name + "'!B2:B1000),0)"
                             _summary_rows.append([_sec, _tab_name, _formula])
                         _summary_rows.append(["", "", ""])
-                        _summary_rows.append(["전체 합계", "", "=SUM(C2:C" + str(1 + len(_ALL_HW_TABS)) + ")"])
+                        _summary_rows.append(["전체 합계", "", "=SUM(C2:C" + str(1 + len(_tab_sections)) + ")"])
                         # batch_update로 수식(USER_ENTERED) 입력 — 복원 코드와 동일 메서드
                         _sw.batch_update(
                             [{"range": "A2", "values": _summary_rows}],
@@ -2451,14 +2544,9 @@ with st.sidebar:
                             params={"valueInputOption": "USER_ENTERED"},
                             body={"values": _d_formula_rows},
                         )
-                        # 탭 순서: 제출현황 맨 앞 → _ALL_HW_TABS 순 → 그 외 탭
-                        _all_ws = {w.title: w for w in _sh.worksheets()}
-                        _ordered = [_sw]
-                        for _t in _ALL_HW_TABS:
-                            if _t in _all_ws:
-                                _ordered.append(_all_ws[_t])
-                        _rest = [w for w in _sh.worksheets() if w.title != _SUMMARY and w.title not in _ALL_HW_TABS]
-                        _sh.reorder_worksheets(_ordered + _rest)
+                        # 탭 순서: 제출현황 → 사전준비 → 과제 순서 (캡처 탭은 과제 바로 뒤) → 그 외 탭
+                        _reorder_sheet_tabs(_sh)
+                        _sheet_tab_titles.clear()
                         if _created:
                             st.success(f"✅ 생성됨: {', '.join(_created)}")
                         if _skipped:
@@ -2466,6 +2554,33 @@ with st.sidebar:
                         st.success("📊 제출현황 탭도 업데이트됐습니다.")
                     except Exception as _e:
                         st.error(f"오류: {_e}")
+
+            st.markdown("---")
+            with st.expander("🗑 시트 제출 내용 일괄 삭제"):
+                st.caption("모든 과제 탭·캡처 탭의 학생 제출 내용을 지웁니다. 탭과 머리글, 📊 제출현황 수식은 남습니다. "
+                           "지운 내용은 되돌릴 수 없으니 필요하면 먼저 시트를 '파일 › 사본 만들기'로 보관하세요.")
+                _del_acc = st.checkbox("접속자 명단(접속자현황)도 지우기", key="_clear_acc")
+                _del_ok = st.text_input("확인을 위해 '삭제'라고 입력하세요", key="_clear_confirm")
+                if st.button("🗑 제출 내용 모두 지우기", key="_clear_btn", use_container_width=True):
+                    if _del_ok.strip() != "삭제":
+                        st.warning("확인 칸에 '삭제'라고 입력해야 지웁니다.")
+                    else:
+                        with st.spinner("지우는 중..."):
+                            _n, _cerr = _clear_all_submissions(_del_acc)
+                        if _cerr:
+                            st.error("삭제 실패: " + _cerr)
+                        else:
+                            st.success("✅ %d개 탭의 제출 내용을 지웠습니다." % _n)
+
+            with st.expander("🖼 시트에서 캡처를 그림으로 보기 (처음 한 번 설치)"):
+                st.caption("앱은 캡처를 시트에 '이미지 글자'로 저장합니다(숨긴 D~J열). 아래 스크립트를 시트에 한 번 "
+                           "설치하면 1분마다 K열 '캡처 이미지'에 실제 그림으로 바꿔 넣습니다. 강사 계정으로 실행되어 "
+                           "드라이브 공유 설정이 필요 없습니다.")
+                st.markdown("1. 과제 제출 구글 시트 열기 → 메뉴 **확장 프로그램 › Apps Script**\n"
+                            "2. 원래 있던 코드를 지우고 아래 코드를 붙여넣기 → 💾 저장\n"
+                            "3. 위쪽 함수 목록에서 **installTrigger** 선택 → ▶ 실행 → 권한 허용\n"
+                            "4. 시트로 돌아오면 캡처 탭 K열에 그림이 보입니다 (메뉴 🖼 캡처 › 지금 그림으로 보기)")
+                st.code(_CAPTURE_IMG_GS, language="javascript")
 
             st.markdown("---")
             st.caption("모든 섹션·탭의 스크립트 입력칸·과제 제출란에 테스트용 더미 데이터를 채웁니다. (구글 시트에는 저장되지 않음 — 프로젝트 정리 반영 확인용)")
